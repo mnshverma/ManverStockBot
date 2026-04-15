@@ -23,37 +23,56 @@ NIFTY50_TICKERS = [
 def fetch_market_data():
     """Fetch Nifty 50 stocks data using Yahoo Finance."""
     try:
-        tickers = yf.Tickers(NIFTY50_TICKERS)
-        
         data = []
         for symbol in NIFTY50_TICKERS:
             try:
                 ticker = yf.Ticker(symbol)
-                info = ticker.info
+                hist = ticker.history(period="2d")
                 
-                current_price = info.get('currentPrice') or info.get('regularMarketPreviousClose')
-                previous_close = info.get('regularMarketPreviousClose')
+                if hist.empty:
+                    continue
                 
-                if current_price and previous_close:
-                    pct_change = ((current_price - previous_close) / previous_close) * 100
-                else:
-                    pct_change = 0
+                current_price = hist['Close'].iloc[-1]
+                previous_close = hist['Close'].iloc[-2] if len(hist) > 1 else current_price
+                
+                if previous_close == 0:
+                    previous_close = current_price
+                    
+                pct_change = ((current_price - previous_close) / previous_close) * 100
+                
+                try:
+                    info = ticker.info
+                    day_high = info.get('dayHigh') or current_price
+                    day_low = info.get('dayLow') or current_price
+                    volume = info.get('volume')
+                    market_cap = info.get('marketCap')
+                except:
+                    day_high = current_price
+                    day_low = current_price
+                    volume = None
+                    market_cap = None
                 
                 data.append({
                     'symbol': symbol.replace('.NS', ''),
-                    'lastPrice': current_price,
-                    'previousClose': previous_close,
-                    'perChange': pct_change,
-                    'dayHigh': info.get('dayHigh'),
-                    'dayLow': info.get('dayLow'),
-                    'volume': info.get('volume'),
-                    'marketCap': info.get('marketCap')
+                    'lastPrice': float(current_price),
+                    'previousClose': float(previous_close),
+                    'perChange': float(pct_change),
+                    'dayHigh': float(day_high) if day_high else None,
+                    'dayLow': float(day_low) if day_low else None,
+                    'volume': volume,
+                    'marketCap': market_cap
                 })
             except Exception:
                 continue
         
+        if not data:
+            return None
+            
         df = pd.DataFrame(data)
-        df = df.dropna(subset=['lastPrice', 'perChange'])
+        
+        if df.empty or 'perChange' not in df.columns:
+            return None
+            
         return df
     except Exception as e:
         st.error(f"Error fetching data: {e}")

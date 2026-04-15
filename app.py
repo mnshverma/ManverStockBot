@@ -452,75 +452,83 @@ def main():
     
     df_sorted = df.sort_values(by=["per_change"], ascending=False).reset_index(drop=True)
     
-    # Search at top
-    st.subheader("🔍 Search Stock")
-    search = st.text_input("Search by symbol or name", "").upper()
-    
-    if search:
-        results = df[df['symbol'].str.contains(search, na=False) | df['company'].str.upper().str.contains(search, na=False)]
-        if not results.empty:
-            for _, row in results.iterrows():
-                with st.expander(f"{row['symbol']} - {row['company']}", expanded=True):
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        st.metric("Price", f"₹{row['current_price']:.2f}", delta=f"{row['per_change']:+.2f}%")
-                        st.write(f"**Change:** {row['change_amount']:+.2f}")
-                        st.write(f"**Day Range:** ₹{row['day_low']:.2f} - ₹{row['day_high']:.2f}")
-                    with c2:
-                        st.write(f"**Open:** ₹{row['open']:.2f}")
-                        st.write(f"**Prev Close:** ₹{row['prev_close']:.2f}")
-                        st.write(f"**Volume:** {format_volume(row['volume'])}")
-                    
-                    c3, c4 = st.columns(2)
-                    with c3:
-                        st.write(f"**52W High:** ₹{row['week_52_high']:.2f}" if row['week_52_high'] else "**52W High:** N/A")
-                        st.write(f"**Market Cap:** {format_market_cap(row['market_cap'])}" if row['market_cap'] else "**Market Cap:** N/A")
-                        st.write(f"**P/E:** {row['pe_ratio']:.2f}" if row['pe_ratio'] else "**P/E:** N/A")
-                    with c4:
-                        st.write(f"**52W Low:** ₹{row['week_52_low']:.2f}" if row['week_52_low'] else "**52W Low:** N/A")
-                        st.write(f"**ROE:** {row['roe']*100:.2f}%" if row['roe'] else "**ROE:** N/A")
-                        st.write(f"**EPS:** ₹{row['eps']:.2f}" if row['eps'] else "**EPS:** N/A")
-        else:
-            st.warning("No stocks found")
-        st.divider()
-    
     # Summary at top
     avg = df_sorted["per_change"].mean()
-    gainers = len(df_sorted[df_sorted['per_change'] > 0])
-    losers = len(df_sorted[df_sorted['per_change'] < 0])
     
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Avg Change", f"{avg:+.2f}%")
-    c2.metric("Gainers", gainers)
-    c3.metric("Losers", losers)
-    c4.metric("Total", len(df_sorted))
+    c1, c2 = st.columns(2)
+    c1.metric("Nifty 50 Avg Change", f"{avg:+.2f}%")
+    c2.metric("Total Stocks", len(df_sorted))
     
     st.divider()
+    
+    # Get Bullish and Bearish predictions for all stocks
+    predictions = []
+    for _, row in df_sorted.iterrows():
+        rec = get_recommendation(row)
+        predictions.append({
+            'symbol': row['symbol'],
+            'company': row['company'],
+            'current_price': row['current_price'],
+            'per_change': row['per_change'],
+            'action': rec['action'],
+            'score': rec['score'],
+            'target': rec['target'],
+            'stop_loss': rec['stop_loss'],
+            'timeframe': rec['timeframe'],
+            'reasoning': rec['reasoning']
+        })
+    
+    pred_df = pd.DataFrame(predictions)
+    pred_bullish = pred_df[pred_df['action'] == '🟢 BUY'].sort_values('score', ascending=False)
+    pred_bearish = pred_df[pred_df['action'] == '🔴 SELL'].sort_values('score', ascending=False)
     
     # Main UI
     tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "📈 Stock Detail", "🔔 Alerts"])
     
     with tab1:
-        st.subheader("📊 All Nifty 50 Stocks")
+        # Market Overview
+        st.subheader("📈 Top Gainers of the Day")
         st.dataframe(
-            df_sorted[['symbol', 'company', 'current_price', 'per_change', 'open_price', 'day_low', 'day_high']],
+            df_sorted.head(5)[['symbol', 'company', 'current_price', 'per_change']],
             use_container_width=True,
             hide_index=True
         )
         
-        c1, c2 = st.columns(2)
-        with c1:
-            st.subheader("🟢 Top Gainers")
-            st.dataframe(df_sorted.head(5)[['symbol', 'current_price', 'per_change']], hide_index=True)
-        with c2:
-            st.subheader("🔴 Top Losers")
-            st.dataframe(df_sorted.tail(5)[['symbol', 'current_price', 'per_change']], hide_index=True)
-        
-        st.subheader("💰 Stocks Below ₹1000")
+        st.subheader("📉 Top Losers of the Day")
         st.dataframe(
-            df_sorted[df_sorted["current_price"] < 1000][['symbol', 'current_price', 'per_change']],
+            df_sorted.tail(5)[['symbol', 'company', 'current_price', 'per_change']],
+            use_container_width=True,
             hide_index=True
         )
+        
+        st.subheader("💰 Stocks Below ₹1000")
+        below = df_sorted[df_sorted["current_price"] < 1000][['symbol', 'current_price', 'per_change']]
+        if not below.empty:
+            st.dataframe(below, use_container_width=True, hide_index=True)
+        else:
+            st.info("No stocks below ₹1000")
+        
+# Predicted Bullish stocks (expected to go up)
+        st.subheader("🟢 Predicted BULLISH (May Go Up)")
+        if not pred_bullish.empty:
+            st.dataframe(
+                pred_bullish[['symbol', 'company', 'current_price', 'per_change', 'target', 'timeframe']],
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.info("No bullish stocks detected")
+        
+        # Predicted Bearish stocks (expected to go down)
+        st.subheader("🔴 Predicted BEARISH (May Go Down)")
+        if not pred_bearish.empty:
+            st.dataframe(
+                pred_bearish[['symbol', 'company', 'current_price', 'per_change', 'target', 'timeframe']],
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.info("No bearish stocks detected")
     
     with tab2:
         selected = st.selectbox("Select Stock", df_sorted['symbol'].tolist())
@@ -529,25 +537,35 @@ def main():
             s = df_sorted[df_sorted['symbol'] == selected].iloc[0]
             
             # Price Header
-            st.metric("Price", f"₹{s['current_price']:.2f}", delta=f"{s['change_amount']:+.2f} ({s['per_change']:+.2f}%)")
+            price_change = s['change_amount']
+            pct_change = s['per_change']
+            st.metric("Price", f"₹{s['current_price']:.2f}", delta=f"{price_change:+.2f} ({pct_change:+.2f}%)")
             
             # Get recommendation
             rec = get_recommendation(s)
             
-            # Recommendation box
-            rec_col1, rec_col2, rec_col3, rec_col4 = st.columns(4)
-            rec_col1.write("**Recommendation**")
-            rec_col1.subheader(rec['action'])
-            rec_col2.write("**Target**")
-            rec_col2.write(f"₹{rec['target']:.2f}")
-            rec_col3.write("**Stop Loss**")
-            rec_col3.write(f"₹{rec['stop_loss']:.2f}")
-            rec_col4.write("**Timeframe**")
-            rec_col4.write(rec['timeframe'])
+            # Bullish/Bearish header
+            if "BUY" in rec['action']:
+                st.success(f"🟢 {rec['action']} - Predicted to GO UP in {rec['timeframe']}")
+            elif "SELL" in rec['action']:
+                st.error(f"🔴 {rec['action']} - Predicted to go DOWN in {rec['timeframe']}")
+            else:
+                st.warning(f"⚪ {rec['action']} - Hold for {rec['timeframe']}")
             
-            with st.expander("📋 Analysis Details"):
-                st.write(f"**Score:** {rec['score']}")
-                st.write(f"**Reasoning:** {rec['reasoning']}")
+            # Target and Stop Loss
+            c1, c2 = st.columns(2)
+            with c1:
+                st.info(f"🎯 Target: ₹{rec['target']:.2f} (+{((rec['target']/s['current_price']-1)*100):.1f}%)")
+            with c2:
+                st.warning(f"🛡️ Stop Loss: ₹{rec['stop_loss']:.2f} ({((rec['stop_loss']/s['current_price']-1)*100):.1f}%)")
+            
+            # Detailed Analysis
+            with st.expander("📊 Analysis Breakdown", expanded=True):
+                st.write(f"**Signal Score:** {rec['score']}")
+                st.write("**Reasons:**")
+                for sig in rec['signals']:
+                    emoji = "🟢" if sig[1] > 0 else "🔴"
+                    st.write(f"  {emoji} {sig[0]}")
             
             # Tabs
             p_tab, f_tab, a_tab, n_tab = st.tabs(["Performance", "Fundamentals", "About", "📰 News"])

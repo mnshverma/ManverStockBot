@@ -386,6 +386,67 @@ def create_prediction_alerts(df):
 def create_telegram_alerts(df):
     return create_prediction_alerts(df)
 
+def create_market_news(df):
+    """Create market weather news message."""
+    if df is None or df.empty:
+        return None
+    
+    avg_change = df["per_change"].mean()
+    gainers = len(df[df['per_change'] > 0])
+    losers = len(df[df['per_change'] < 0])
+    
+    pred_msgs = []
+    for _, row in df.iterrows():
+        rec = get_recommendation(row)
+        pred_msgs.append({
+            'symbol': row['symbol'],
+            'action': rec['action'],
+            'score': rec.get('score', 0)
+        })
+    
+    pred_df = pd.DataFrame(pred_msgs)
+    bullish_count = len(pred_df[pred_df['action'] == '🟢 BUY'])
+    bearish_count = len(pred_df[pred_df['action'] == '🔴 SELL'])
+    hold_count = len(pred_df[pred_df['action'] == '⚪ HOLD'])
+    
+    if avg_change > 0.5 and bullish_count > bearish_count:
+        weather = "☀️ BULLISH"
+    elif avg_change < -0.5 and bearish_count > bullish_count:
+        weather = "🌧️ BEARISH"
+    elif avg_change > 0:
+        weather = "⛅ BULLISH (Moderate)"
+    elif avg_change < 0:
+        weather = "☁️ BEARISH (Moderate)"
+    else:
+        weather = "🌤️ NEUTRAL"
+    
+    now = datetime.now().strftime('%d-%m-%Y %H:%M')
+    
+    msg = f"📰 MARKET NEWS - {now}\n\n"
+    msg += f"Market Weather: {weather}\n\n"
+    msg += f"📈 Avg Change: {avg_change:+.2f}%\n"
+    msg += f"🟢 Gainers: {gainers} | 🔴 Losers: {losers}\n\n"
+    msg += f"PREDICTIONS:\n"
+    msg += f"🟢 Bullish: {bullish_count} | 🔴 Bearish: {bearish_count} | ⚪ Hold: {hold_count}\n\n"
+    
+    if bullish_count > bearish_count:
+        top_stocks = pred_df[pred_df['action'] == '🟢 BUY'].head(5)
+        msg += f"TOP BULLISH:\n"
+        for _, s in top_stocks.iterrows():
+            msg += f"• {s['symbol']} {s['action']}\n"
+    elif bearish_count > bullish_count:
+        top_stocks = pred_df[pred_df['action'] == '🔴 SELL'].head(5)
+        msg += f"TOP BEARISH:\n"
+        for _, s in top_stocks.iterrows():
+            msg += f"• {s['symbol']} {s['action']}\n"
+    else:
+        top_stocks = pred_df[pred_df['action'] == '⚪ HOLD'].head(5)
+        msg += f"HOLD:\n"
+        for _, s in top_stocks.iterrows():
+            msg += f"• {s['symbol']} {s['action']}\n"
+    
+    return msg
+
 def main():
     st.set_page_config(page_title="ManverInsight", page_icon="📈", layout="wide")
     st.title("📈 ManverInsight")
@@ -399,6 +460,11 @@ def main():
         
         if df is not None:
             messages = create_prediction_alerts(df)
+            market_news = create_market_news(df)
+            
+            if market_news and messages:
+                messages[0] = messages[0] + "\n\n" + market_news
+            
             for i, msg in enumerate(messages):
                 st.code(msg[:800], language="markdown")
             
@@ -525,7 +591,8 @@ def main():
                         }
                         selected_stock = custom_symbol
                 except Exception as e:
-                    st.error(f"Error: {str(e)[:80]")
+                    err_msg = str(e)[:80]
+                    st.error(f"Error: {err_msg}")
         
         if not selected_stock and not stock_data:
             nifty_choice = st.selectbox("Or select from Nifty 50", df_sorted['symbol'].tolist())

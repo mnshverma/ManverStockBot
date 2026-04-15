@@ -233,80 +233,109 @@ def get_recommendation(s):
     """Generate buy/sell/hold recommendation based on technical and fundamental analysis."""
     signals = []
     score = 0
+    per_change = s.get('per_change', 0) or 0
+    
+    # Positive daily momentum
+    if per_change > 1:
+        signals.append((" Strong Positive ", 2))
+        score += 2
+    elif per_change > 0:
+        signals.append((" Positive ", 1))
+        score += 1
+    
+    # Negative daily momentum
+    if per_change < -1:
+        signals.append((" Negative ", -1))
+        score -= 1
+    elif per_change < 0:
+        signals.append((" Slight Negative ", -1))
+        score -= 1
     
     # Price vs 52W analysis
     if s['current_price'] and s['week_52_low'] and s['week_52_high']:
         price_range = s['week_52_high'] - s['week_52_low']
         if price_range > 0:
             price_position = (s['current_price'] - s['week_52_low']) / price_range
-            if price_position < 0.25:
-                signals.append((" Oversold - Potential Buy ", 2))
+            if price_position < 0.35:
+                signals.append((" Near 52W Low - Upside Potential ", 2))
                 score += 2
-            elif price_position > 0.85:
-                signals.append((" Overbought - Wait ", -1))
+            elif price_position > 0.75:
+                signals.append((" Near 52W High - Limited Upside ", -1))
                 score -= 1
     
-    # Daily change analysis
-    if s['per_change']:
-        if s['per_change'] > 3:
-            signals.append((" Strong Momentum ", 1))
-            score += 1
-        elif s['per_change'] > 1.5:
-            signals.append((" Gap Up ", 1))
-            score += 1
-        elif s['per_change'] < -3:
-            signals.append((" Heavy Sell ", -1))
-            score -= 1
-        elif s['per_change'] < -1.5:
-            signals.append((" Gap Down - Potential Bottom ", 1))
-            score += 1
-    
-    # Volume analysis
-    if s.get('volume') and s.get('avg_volume'):
-        if s['volume'] > s['avg_volume'] * 2:
-            signals.append((" High Volume ", 1 if s['per_change'] > 0 else -1))
-            score += 1 if s['per_change'] > 0 else -1
-    
-    # Fundamental checks
-    if s.get('pe_ratio'):
-        if 10 < s['pe_ratio'] < 25:
-            signals.append((" Reasonable PE ", 1))
-            score += 1
-        elif s['pe_ratio'] > 40:
-            signals.append((" High PE - Risky ", -1))
-            score -= 1
-        elif s['pe_ratio'] < 0:
-            signals.append((" Negative Earnings ", -1))
-            score -= 1
-    
-    if s.get('roe') and s['roe'] > 0.15:
-        signals.append((" Good ROE ", 1))
-        score += 1
-    
-    # Moving average check
+    # Price vs Moving Averages
     if s.get('fifty_day_avg') and s.get('two_hundred_day_avg'):
-        if s['current_price'] > s['fifty_day_avg'] > s['two_hundred_day_avg']:
-            signals.append((" Above MA - Bullish ", 2))
+        if s['current_price'] > s['fifty_day_avg']:
+            signals.append((" Above 50 DMA ", 1))
+            score += 1
+        if s['fifty_day_avg'] > s['two_hundred_day_avg']:
+            signals.append((" Golden Cross Signal ", 2))
             score += 2
-        elif s['current_price'] < s['fifty_day_avg'] < s['two_hundred_day_avg']:
-            signals.append((" Below MA - Bearish ", -2))
+        if s['current_price'] < s['fifty_day_avg']:
+            signals.append((" Below 50 DMA ", -1))
+            score -= 1
+        if s['fifty_day_avg'] < s['two_hundred_day_avg']:
+            signals.append((" Death Cross Signal ", -2))
             score -= 2
     
-    if score >= 3:
+    # Volume analysis
+    vol = s.get('volume', 0) or 0
+    avg_vol = s.get('avg_volume', 0) or 0
+    if avg_vol and vol > avg_vol * 1.5:
+        signals.append((" High Volume ", 1 if per_change > 0 else -1))
+        score += 1 if per_change > 0 else -1
+    elif avg_vol and vol < avg_vol * 0.3:
+        signals.append((" Low Volume ", 0))
+    
+    # Fundamental checks - positive
+    pe = s.get('pe_ratio') or 0
+    if 0 < pe < 20:
+        signals.append((" Reasonable PE ", 1))
+        score += 1
+    elif 0 < pe < 15:
+        signals.append((" Cheap Valuation ", 2))
+        score += 2
+    
+    roe = s.get('roe') or 0
+    if roe > 0.15:
+        signals.append((" Good ROE ", 1))
+        score += 1
+    elif roe > 0.20:
+        signals.append((" Excellent ROE ", 2))
+        score += 2
+    
+    # Fundamental checks - negative
+    if pe > 35:
+        signals.append((" Expensive ", -1))
+        score -= 1
+    elif pe < 0:
+        signals.append((" Loss Making ", -2))
+        score -= 2
+    
+    beta = s.get('beta') or 1
+    if 0.8 < beta < 1.2:
+        signals.append((" Stable ", 1))
+        score += 1
+    elif beta > 1.3:
+        signals.append((" High Volatility ", -1))
+        score -= 1
+    
+    # Final action determination
+    if score >= 2:
         action = "🟢 BUY"
-        target = s['current_price'] * 1.10
-        stop = s['current_price'] * 0.97
-        timeframe = "1-4 weeks"
+        target = s['current_price'] * 1.12
+        stop = s['current_price'] * 0.96
+        timeframe = "2-4 weeks"
     elif score <= -2:
         action = "🔴 SELL"
-        target = s['current_price'] * 0.95
-        stop = s['current_price'] * 1.03
-        timeframe = "1-2 weeks"
+        target = s['current_price'] * 0.90
+        stop = s['current_price'] * 1.05
+        timeframe = "1-3 weeks"
     else:
         action = "⚪ HOLD"
-        target = s['current_price'] * 1.03
-        stop = s['current_price'] * 0.98
-        timeframe = "2-4 weeks"
+        target = s['current_price'] * 1.05
+        stop = s['current_price'] * 0.97
+        timeframe = "3-4 weeks"
     
     return {
         "action": action,
@@ -315,7 +344,7 @@ def get_recommendation(s):
         "timeframe": timeframe,
         "score": score,
         "signals": signals,
-        "reasoning": "; ".join([s[0] for s in signals]) if signals else "No clear signals"
+        "reasoning": "; ".join([s[0] for s in signals]) if signals else "Neutral"
     }
 
 @st.cache_data(ttl=1800)

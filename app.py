@@ -321,7 +321,7 @@ def create_prediction_alerts(df):
             price = float(s.get('current_price', 0) or 0)
             pct = float(s.get('per_change', 0) or 0)
             target = float(s.get('target', 0) or 0)
-stop = float(s.get('stop', 0) or 0)
+            stop = float(s.get('stop', 0) or 0)
             pe = float(s.get('pe', 0) or 0)
             roe = float(s.get('roe', 0) or 0)
             signals = s.get('signals', '')

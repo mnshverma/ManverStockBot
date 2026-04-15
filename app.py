@@ -311,7 +311,7 @@ def create_prediction_alerts(df):
     if not bearish.empty:
         msg += f"Bearish\n"
         msg += f"-----------\n\n"
-        for _, s in bearish.head(10).iterrows():
+        for _, s in bearish.head(20).iterrows():
             price = s.get('current_price', 0)
             pct = s.get('per_change', 0)
             target = s.get('target', 0)
@@ -320,7 +320,7 @@ def create_prediction_alerts(df):
             roe = s.get('roe', 0)
             signals = s.get('signals', '')
             
-            if price and price > 0:
+            if price and price > 0 and target > 0 and stop > 0:
                 msg += f"■ {s['symbol']} ₹{int(price)} ({pct:+.1f}%)\n"
                 msg += f"  🎯 Target: ₹{int(target)} ({((target-price)/price)*100:+-.1f}%)\n"
                 msg += f"  🛡️ Stop: ₹{int(stop)} ({((stop-price)/price)*100:+.1f}%)\n"
@@ -342,7 +342,7 @@ def create_prediction_alerts(df):
     if not bullish.empty:
         msg += f"\nBullish\n"
         msg += f"-----------\n\n"
-        for _, s in bullish.head(10).iterrows():
+        for _, s in bullish.head(20).iterrows():
             price = s.get('current_price', 0)
             pct = s.get('per_change', 0)
             target = s.get('target', 0)
@@ -351,7 +351,7 @@ def create_prediction_alerts(df):
             roe = s.get('roe', 0)
             signals = s.get('signals', '')
             
-            if price and price > 0 and not math.isnan(price):
+            if price and price > 0 and target > 0 and stop > 0:
                 msg += f"■ {s['symbol']} ₹{int(price)} ({pct:+.1f}%)\n"
                 msg += f"  🎯 Target: ₹{int(target)} ({((target-price)/price)*100:+-.1f}%)\n"
                 msg += f"  🛡️ Stop: ₹{int(stop)} ({((stop-price)/price)*100:+.1f}%)\n"

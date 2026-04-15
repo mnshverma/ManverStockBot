@@ -406,24 +406,8 @@ def fetch_market_news():
 def send_telegram_msg(message, debug=False):
     """Send Telegram message."""
     try:
-        # Try all possible secret names (case insensitive)
-        bot_token = (
-            st.secrets.get("BOT_TOKEN") or 
-            st.secrets.get("bot_token") or 
-            st.secrets.get("BOT_TOKEN", "") or
-            st.secrets.get("bot_token", "")
-        )
-        chat_id = (
-            st.secrets.get("CHAT_ID") or 
-            st.secrets.get("chat_id") or 
-            st.secrets.get("CHAT_ID", "") or 
-            st.secrets.get("chat_id", "")
-        )
-        
-        if bot_token:
-            bot_token = bot_token.strip()
-        if chat_id:
-            chat_id = chat_id.strip()
+        bot_token = st.secrets.get("BOT_TOKEN", "").strip()
+        chat_id = st.secrets.get("CHAT_ID", "").strip()
         
         if not bot_token or not chat_id:
             return {"success": False, "error": "Credentials missing in secrets.toml"}
@@ -581,11 +565,11 @@ def main():
             for i, msg in enumerate(messages):
                 st.code(msg[:500], language="markdown")
             
-            # Try reading secrets both ways
-        bot_token = st.secrets.get("BOT_TOKEN", st.secrets.get("bot_token", "")).strip()
-        chat_id = st.secrets.get("CHAT_ID", st.secrets.get("chat_id", "")).strip()
-        
-        st.markdown(f"**Debug:** Token=`{bot_token[:10]}...` len={len(bot_token)}, ChatID=`{chat_id}`")
+            # Read secrets
+            bot_token = st.secrets.get("BOT_TOKEN", "").strip()
+            chat_id = st.secrets.get("CHAT_ID", "").strip()
+            
+            st.markdown(f"**Debug:** Token=`{bot_token[:8]}...` len={len(bot_token)}, ChatID=`{chat_id}`")
             
             sent = 0
             failed = 0

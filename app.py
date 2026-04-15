@@ -545,7 +545,7 @@ def main():
                     import time
                     time.sleep(0.3)
                     ticker = yf.Ticker(f"{custom_symbol}.NS")
-hist = ticker.history(period="5d", timeout=15)
+                    hist = ticker.history(period="5d", timeout=15)
                     
                     if hist.empty:
                         st.error("Stock not found")

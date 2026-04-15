@@ -137,8 +137,8 @@ def main():
     st.set_page_config(page_title="Nifty Monitor", page_icon="📈", layout="wide")
     st.title("📈 Nifty Stock Monitoring Agent")
     
-    query_params = st.experimental_get_query_params()
-    is_triggered = query_params.get("trigger", [""])[0] == TRIGGER_PARAM
+    query_params = st.query_params
+    is_triggered = query_params.get("trigger", "") == TRIGGER_PARAM
     
     if is_triggered:
         st.info(f"🔔 Running in trigger mode: {TRIGGER_PARAM}")

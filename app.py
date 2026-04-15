@@ -329,14 +329,20 @@ def create_prediction_alerts(df):
             
             if price > 0 and not math.isnan(price):
                 msg += f"■ {sym} ₹{int(price)} ({pct:+.1f}%)\n"
-                if target > 0 and not math.isnan(target):
-                    tgt_pct = ((target-price)/price)*100
-                    if not math.isnan(tgt_pct):
-                        msg += f"  🎯 Target: ₹{int(target)} ({tgt_pct:+-.1f}%)\n"
-                if stop > 0 and not math.isnan(stop):
-                    stp_pct = ((stop-price)/price)*100
-                    if not math.isnan(stp_pct):
-                        msg += f"  🛡️ Stop: ₹{int(stop)} ({stp_pct:+.1f}%)\n"
+                try:
+                    if target > 0 and target != price:
+                        tgt_pct = ((target-price)/price)*100
+                        if not math.isnan(tgt_pct):
+                            msg += f"  🎯 Target: ₹{int(target)} ({tgt_pct:+.1f}%)\n"
+                except:
+                    pass
+                try:
+                    if stop > 0 and stop != price:
+                        stp_pct = ((stop-price)/price)*100
+                        if not math.isnan(stp_pct):
+                            msg += f"  🛡️ Stop: ₹{int(stop)} ({stp_pct:+.1f}%)\n"
+                except:
+                    pass
                 msg += f"  ⏱️ 2-4 weeks"
                 if pe > 0 and not math.isnan(pe):
                     msg += f" | P/E:{pe:.1f}"
@@ -361,14 +367,20 @@ def create_prediction_alerts(df):
             
             if price > 0 and not math.isnan(price):
                 msg += f"■ {sym} ₹{int(price)} ({pct:+.1f}%)\n"
-                if target > 0 and not math.isnan(target):
-                    tgt_pct = ((target-price)/price)*100
-                    if not math.isnan(tgt_pct):
-                        msg += f"  🎯 Target: ₹{int(target)} ({tgt_pct:+-.1f}%)\n"
-                if stop > 0 and not math.isnan(stop):
-                    stp_pct = ((stop-price)/price)*100
-                    if not math.isnan(stp_pct):
-                        msg += f"  🛡️ Stop: ₹{int(stop)} ({stp_pct:+.1f}%)\n"
+                try:
+                    if target > 0 and target != price:
+                        tgt_pct = ((target-price)/price)*100
+                        if not math.isnan(tgt_pct):
+                            msg += f"  🎯 Target: ₹{int(target)} ({tgt_pct:+.1f}%)\n"
+                except:
+                    pass
+                try:
+                    if stop > 0 and stop != price:
+                        stp_pct = ((stop-price)/price)*100
+                        if not math.isnan(stp_pct):
+                            msg += f"  🛡️ Stop: ₹{int(stop)} ({stp_pct:+.1f}%)\n"
+                except:
+                    pass
                 msg += f"  ⏱️ 2-4 weeks"
                 if pe > 0 and not math.isnan(pe):
                     msg += f" | P/E:{pe:.1f}"

@@ -218,9 +218,9 @@ def get_recommendation(s):
         signals.append(("Good ROE", 1))
         score += 1
     
-    if score >= 2:
+    if score >= 1:
         action = "🟢 BUY"
-    elif score <= -2:
+    elif score <= -1:
         action = "🔴 SELL"
     else:
         action = "⚪ HOLD"
@@ -239,7 +239,15 @@ def fetch_stock_news(symbol):
         try:
             news = ticker.news
             if news and len(news) > 0:
-                return news
+                formatted = []
+                for n in news[:5]:
+                    formatted.append({
+                        'title': n.get('title', 'News')[:60],
+                        'summary': n.get('summary', '')[:100] if n.get('summary') else n.get('publisher', ''),
+                        'link': n.get('link', f'https://groww.in/stocks/{symbol.lower()}-ltd')
+                    })
+                if formatted:
+                    return formatted
         except:
             pass
         try:
@@ -249,7 +257,7 @@ def fetch_stock_news(symbol):
         company_name = info.get('longName', info.get('shortName', symbol))
         return [{
             'title': f"{company_name} - NSE:{symbol}",
-            'summary': f"Company: {company_name}",
+            'summary': f"Company: {company_name} - Visit for latest news",
             'link': f"https://groww.in/stocks/{symbol.lower()}-ltd"
         }]
     except:

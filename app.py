@@ -3,6 +3,7 @@ import requests
 import pandas as pd
 import yfinance as yf
 from datetime import datetime
+import math
 
 TRIGGER_PARAM = "manver_agent_8am"
 
@@ -284,7 +285,7 @@ def create_prediction_alerts(df):
         pe = row.get('pe_ratio') or 0
         roe = row.get('roe') or 0
         
-        if current_price and current_price > 0 and current_price == current_price:
+        if current_price and current_price > 0 and not math.isnan(current_price):
             if "BUY" in rec['action']:
                 target = current_price * 1.1
                 stop = current_price * 0.97
@@ -318,41 +319,13 @@ def create_prediction_alerts(df):
     avg_change = df_sorted["per_change"].mean()
     now = datetime.now().strftime('%d-%m-%Y %H:%M')
     
-    msg = f"📊 MANVERINSIGHT - {now}\n"
-    msg += f"Avg: {avg_change:+.1f}% | 🟢 {len(bullish)} | 🔴 {len(bearish)}\n\n"
+    avg_change = 0 if (math.isnan(avg_change) if isinstance(avg_change, float) else False) else avg_change
     
-    if not bullish.empty:
-        msg += f"🟢 BUY ({len(bullish)}):\n"
-        for _, s in bullish.head(10).iterrows():
-            price = s.get('current_price', 0)
-            pct = s.get('per_change', 0)
-            target = s.get('target', 0)
-            stop = s.get('stop', 0)
-            pe = s.get('pe', 0)
-            roe = s.get('roe', 0)
-            signals = s.get('signals', '')
-            
-            if price and price > 0 and price == price:
-                msg += f"■ {s['symbol']} ₹{int(price)} ({pct:+.1f}%)\n"
-                msg += f"  🎯 Target: ₹{int(target)} ({((target-price)/price)*100:+-.1f}%)\n"
-                msg += f"  🛡️ Stop: ₹{int(stop)} ({((stop-price)/price)*100:+.1f}%)\n"
-                msg += f"  ⏱️ 2-4 weeks"
-                if pe and pe > 0:
-                    msg += f" | P/E:{pe:.1f}"
-                else:
-                    msg += f" | P/E:N/A"
-                if roe and roe > 0:
-                    msg += f" ROE:{roe*100:.0f}%"
-                else:
-                    msg += f" ROE:N/A"
-                msg += f"\n"
-                if signals:
-                    msg += f"  📊 {signals}\n"
-            else:
-                msg += f"■ {s['symbol']} (N/A)\n"
+    msg = f"📊 MANVER INSIGHT - {now}\n\n"
     
     if not bearish.empty:
-        msg += f"\n🔴 SELL ({len(bearish)}):\n"
+        msg += f"Bearish\n"
+        msg += f"-----------\n\n"
         for _, s in bearish.head(10).iterrows():
             price = s.get('current_price', 0)
             pct = s.get('per_change', 0)
@@ -362,16 +335,46 @@ def create_prediction_alerts(df):
             roe = s.get('roe', 0)
             signals = s.get('signals', '')
             
-            if price and price > 0 and price == price:
+            if price and price > 0 and not math.isnan(price):
+                msg += f"  🎯 Target: ₹{int(target)} ({((target-price)/price)*100:+-.1f}%)\n"
+                msg += f"  🛡️ Stop: ₹{int(stop)} ({((stop-price)/price)*100:+.1f}%)\n"
+                msg += f"  ⏱️ 2-4 weeks"
+                if pe and not math.isnan(pe) and pe > 0:
+                    msg += f" | P/E:{pe:.1f}"
+                else:
+                    msg += f" | P/E:N/A"
+                if roe and not math.isnan(roe) and roe > 0:
+                    msg += f" ROE:{roe*100:.0f}%"
+                else:
+                    msg += f" ROE:N/A"
+                msg += f"\n"
+                if signals:
+                    msg += f"  📊 {signals}\n"
+            else:
+                msg += f"■ {s['symbol']} (N/A)\n"
+    
+    if not bullish.empty:
+        msg += f"\nBullish\n"
+        msg += f"-----------\n\n"
+        for _, s in bullish.head(10).iterrows():
+            price = s.get('current_price', 0)
+            pct = s.get('per_change', 0)
+            target = s.get('target', 0)
+            stop = s.get('stop', 0)
+            pe = s.get('pe', 0)
+            roe = s.get('roe', 0)
+            signals = s.get('signals', '')
+            
+            if price and price > 0 and not math.isnan(price):
                 msg += f"■ {s['symbol']} ₹{int(price)} ({pct:+.1f}%)\n"
                 msg += f"  🎯 Target: ₹{int(target)} ({((target-price)/price)*100:+-.1f}%)\n"
                 msg += f"  🛡️ Stop: ₹{int(stop)} ({((stop-price)/price)*100:+.1f}%)\n"
                 msg += f"  ⏱️ 2-4 weeks"
-                if pe and pe > 0:
+                if pe and not math.isnan(pe) and pe > 0:
                     msg += f" | P/E:{pe:.1f}"
                 else:
                     msg += f" | P/E:N/A"
-                if roe and roe > 0:
+                if roe and not math.isnan(roe) and roe > 0:
                     msg += f" ROE:{roe*100:.0f}%"
                 else:
                     msg += f" ROE:N/A"
@@ -392,6 +395,9 @@ def create_market_news(df):
         return None
     
     avg_change = df["per_change"].mean()
+    if math.isnan(avg_change):
+        avg_change = 0
+    
     gainers = len(df[df['per_change'] > 0])
     losers = len(df[df['per_change'] < 0])
     
@@ -407,43 +413,19 @@ def create_market_news(df):
     pred_df = pd.DataFrame(pred_msgs)
     bullish_count = len(pred_df[pred_df['action'] == '🟢 BUY'])
     bearish_count = len(pred_df[pred_df['action'] == '🔴 SELL'])
-    hold_count = len(pred_df[pred_df['action'] == '⚪ HOLD'])
     
-    if avg_change > 0.5 and bullish_count > bearish_count:
-        weather = "☀️ BULLISH"
-    elif avg_change < -0.5 and bearish_count > bullish_count:
-        weather = "🌧️ BEARISH"
-    elif avg_change > 0:
-        weather = "⛅ BULLISH (Moderate)"
-    elif avg_change < 0:
-        weather = "☁️ BEARISH (Moderate)"
+    if bullish_count > bearish_count:
+        weather = "BULLISH"
+    elif bearish_count > bullish_count:
+        weather = "BEARISH"
     else:
-        weather = "🌤️ NEUTRAL"
+        weather = "NEUTRAL"
     
     now = datetime.now().strftime('%d-%m-%Y %H:%M')
     
-    msg = f"📰 MARKET NEWS - {now}\n\n"
-    msg += f"Market Weather: {weather}\n\n"
-    msg += f"📈 Avg Change: {avg_change:+.2f}%\n"
-    msg += f"🟢 Gainers: {gainers} | 🔴 Losers: {losers}\n\n"
-    msg += f"PREDICTIONS:\n"
-    msg += f"🟢 Bullish: {bullish_count} | 🔴 Bearish: {bearish_count} | ⚪ Hold: {hold_count}\n\n"
-    
-    if bullish_count > bearish_count:
-        top_stocks = pred_df[pred_df['action'] == '🟢 BUY'].head(5)
-        msg += f"TOP BULLISH:\n"
-        for _, s in top_stocks.iterrows():
-            msg += f"• {s['symbol']} {s['action']}\n"
-    elif bearish_count > bullish_count:
-        top_stocks = pred_df[pred_df['action'] == '🔴 SELL'].head(5)
-        msg += f"TOP BEARISH:\n"
-        for _, s in top_stocks.iterrows():
-            msg += f"• {s['symbol']} {s['action']}\n"
-    else:
-        top_stocks = pred_df[pred_df['action'] == '⚪ HOLD'].head(5)
-        msg += f"HOLD:\n"
-        for _, s in top_stocks.iterrows():
-            msg += f"• {s['symbol']} {s['action']}\n"
+    msg = f"\n📰 MARKET WEATHER\n"
+    msg += f"Date/Time: {now}\n"
+    msg += f"Status: {weather}"
     
     return msg
 
@@ -671,14 +653,7 @@ def main():
     
     with tab3:
         st.subheader("🔔 Telegram Alerts")
-        msg_type = st.radio("Message Type", ["Predictions"])
-        debug = st.checkbox("Debug")
-        
-        if st.button("Send to Telegram"):
-            messages = create_telegram_alerts(df)
-            for m in messages:
-                send_telegram_msg(m, debug=debug)
-            st.success(f"✅ Sent {len(messages)} message(s)!")
+        st.info("Add '?trigger=manver_agent_8am' to URL to send alerts")
 
 if __name__ == "__main__":
     main()

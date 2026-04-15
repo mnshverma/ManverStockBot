@@ -723,9 +723,6 @@ def main():
         
         if stock_data:
             s = stock_data
-        
-        if custom_data:
-            s = custom_data
             
             # Price & Prediction
             st.metric("Price", f"₹{s['current_price']:.2f}", delta=f"{s['per_change']:+.2f}%")

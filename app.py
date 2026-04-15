@@ -232,32 +232,6 @@ def get_recommendation(s):
         "reasoning": "; ".join([s[0] for s in signals]) if signals else "Neutral"
     }
 
-@st.cache_data(ttl=1800)
-def fetch_stock_news(symbol):
-    try:
-        ticker = yf.Ticker(f"{symbol}.NS")
-        try:
-            info = ticker.info
-        except:
-            info = {}
-        company_name = info.get('longName', info.get('shortName', symbol))
-        
-        return [{
-            'title': f"Stock: {symbol}",
-            'summary': f"{company_name} - Track price & news",
-            'link': f"https://www.moneycontrol.com/stocks/candle-stick-history/{symbol.lower()}"
-        }, {
-            'title': f"Latest: {symbol}",
-            'summary': f"Check charts & trends",
-            'link': f"https://www.tradingview.com/?symbol={symbol}.NS"
-        }, {
-            'title': f"Analysis: {symbol}",
-            'summary': f"Technical indicators",
-            'link': f"https://groww.in/stocks/{symbol.lower()}-ltd"
-        }]
-    except:
-        return []
-
 def send_telegram_msg(message, debug=False):
     try:
         bot_token = str(st.secrets.get("BOT_TOKEN", "")).strip()
@@ -611,7 +585,7 @@ def main():
             else:
                 st.warning(f"⚪ HOLD")
             
-            p_tab, f_tab, a_tab, n_tab = st.tabs(["⚡ Performance", "💼 Fundamentals", "🏢 About", "📰 News"])
+            p_tab, f_tab, a_tab = st.tabs(["⚡ Performance", "💼 Fundamentals", "🏢 About"])
             
             with p_tab:
                 c1, c2 = st.columns(2)
@@ -655,17 +629,6 @@ def main():
                 st.markdown(f"**{s.get('company', s.get('symbol'))}**")
                 st.markdown(f"Industry: {s.get('industry', 'N/A')}")
                 st.markdown(f"Sector: {s.get('sector', 'N/A')}")
-            
-            with n_tab:
-                if selected_stock:
-                    news = fetch_stock_news(selected_stock)
-                    if news:
-                        for idx, item in enumerate(news[:5]):
-                            title = str(item.get("title", ""))[:60] if item.get("title") else "News"
-                            summary = str(item.get("summary", ""))[:100] if item.get("summary") else ""
-                            st.markdown(f"**{idx+1}.** {title}")
-                            if summary:
-                                st.caption(summary)
     
     with tab3:
         st.subheader("🔔 Telegram Alerts")

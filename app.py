@@ -381,72 +381,137 @@ def fetch_market_news():
 def send_telegram_msg(message, debug=False):
     """Send Markdown-formatted alert to Telegram."""
     try:
-        bot_token = st.secrets.get("BOT_TOKEN")
-        chat_id = st.secrets.get("CHAT_ID")
+        bot_token = st.secrets.get("BOT_TOKEN", "")
+        chat_id = st.secrets.get("CHAT_ID", "")
         
         if not bot_token or not chat_id:
-            st.error("Telegram credentials not configured")
-            return False
+            return {"success": False, "error": "No credentials"}
         
-        if bot_token == "your_bot_token_here":
-            st.error("Please update secrets.toml with actual credentials")
-            return False
+        if "your_" in bot_token or "your_" in chat_id:
+            return {"success": False, "error": "Invalid credentials"}
         
         url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
         payload = {"chat_id": chat_id, "text": message, "parse_mode": "Markdown"}
         response = requests.post(url, json=payload, timeout=30)
         
         if debug:
-            st.write(f"Response: {response.status_code}")
+            st.write(f"TG Response: {response.status_code} - {response.text[:200]}")
         
-        return response.status_code == 200
+        if response.status_code == 200:
+            return {"success": True}
+        else:
+            return {"success": False, "error": response.text}
     except Exception as e:
-        st.error(f"Error: {e}")
-        return False
+        return {"success": False, "error": str(e)}
 
-def create_telegram_alerts(df):
-    """Create multiple Telegram messages for better formatting."""
+def create_prediction_alerts(df):
+    """Create prediction-based telegram alerts with full details."""
     if df is None or df.empty:
         return []
     
     messages = []
     df_sorted = df.sort_values(by=["per_change"], ascending=False).reset_index(drop=True)
     
-    # Header
-    avg_change = df_sorted["per_change"].mean()
-    sentiment = "🟢 Bullish" if avg_change > 0.5 else "🔴 Bearish" if avg_change < -0.5 else "⚪ Neutral"
-    signal = "📈 BUY" if avg_change > 0.5 else "📉 SELL" if avg_change < -0.5 else "⏸️ HOLD"
+    # Get predictions for all stocks
+    predictions = []
+    for _, row in df_sorted.iterrows():
+        rec = get_recommendation(row)
+        predictions.append({
+            'symbol': row['symbol'],
+            'company': row['company'],
+            'current_price': row['current_price'],
+            'per_change': row['per_change'],
+            'action': rec['action'],
+            'score': rec['score'],
+            'target': rec['target'],
+            'stop_loss': rec['stop_loss'],
+            'timeframe': rec['timeframe'],
+            'reasoning': rec['reasoning'],
+            'todays_high': row.get('todays_high'),
+            'todays_low': row.get('todays_low'),
+            'week_52_high': row.get('week_52_high'),
+            'week_52_low': row.get('week_52_low'),
+            'volume': row.get('volume'),
+            'market_cap': row.get('market_cap'),
+            'pe_ratio': row.get('pe_ratio'),
+            'roe': row.get('roe'),
+            'eps': row.get('eps'),
+            'industry': row.get('industry')
+        })
     
-    header = f"📊 *Nifty 50 Market Analysis*\n"
+    pred_df = pd.DataFrame(predictions)
+    
+    # Header with market summary
+    avg_change = df_sorted["per_change"].mean()
+    bullish_stocks = pred_df[pred_df['action'] == '🟢 BUY']
+    bearish_stocks = pred_df[pred_df['action'] == '🔴 SELL']
+    
+    header = f"📊 *MANVERINSIGHT - STOCK PREDICTIONS*\n"
     header += f"_{datetime.now().strftime('%Y-%m-%d %H:%M')} IST_\n\n"
-    header += f"*{sentiment}* | {signal}\n"
-    header += f"Avg Change: *{avg_change:+.2f}%*\n"
-    header += f"Stocks: {len(df_sorted)}\n"
+    header += f"📈 *Market:* Nifty 50 | *Avg:* {avg_change:+.2f}%\n"
+    header += f"🟢 Bullish: {len(bullish_stocks)} | 🔴 Bearish: {len(bearish_stocks)}\n"
     messages.append(header)
     
-    # Top Gainers
-    gainers = df_sorted.head(10)
-    gainers_msg = f"🟢 *Top 10 Gainers*\n"
-    for i, row in gainers.iterrows():
-        gainers_msg += f"{i+1}. {row['symbol']}: +{row['per_change']:.2f}% ₹{row['current_price']:.0f}\n"
-    messages.append(gainers_msg)
+    # BULLISH STOCKS with full details
+    if not bullish_stocks.empty:
+        bullish = bullish_stocks.sort_values('score', ascending=False).head(10)
+        msg = f"🟢 *BULLISH STOCKS (May Go Up)* - Top {len(bullish)}\n"
+        msg += "━" * 28 + "\n"
+        for _, s in bullish.iterrows():
+            target_pct = ((s['target']/s['current_price'])-1)*100
+            stop_pct = ((s['stop_loss']/s['current_price'])-1)*100
+            pe = f"P/E:{s['pe_ratio']:.1f}" if s.get('pe_ratio') else "P/E:N/A"
+            roe_str = f"ROE:{s['roe']*100:.0f}%" if s.get('roe') else ""
+            
+            msg += f"■ *{s['symbol']}* ₹{s['current_price']:.0f} ({s['per_change']:+.2f}%)\n"
+            msg += f"  🎯 Target: ₹{s['target']:.0f} (+{target_pct:.0f}%)\n"
+            msg += f"  🛡️ Stop: ₹{s['stop_loss']:.0f} ({stop_pct:.0f}%)\n"
+            msg += f"  ⏱️ {s['timeframe']} | {pe} {roe_str}\n"
+            msg += f"  📊 {s['reasoning'][:60]}...\n\n"
+        messages.append(msg)
     
-    # Top Losers
-    losers = df_sorted.tail(10).iloc[::-1]
-    losers_msg = f"🔴 *Top 10 Losers*\n"
-    for i, row in losers.iterrows():
-        losers_msg += f"{i+1}. {row['symbol']}: {row['per_change']:.2f}% ₹{row['current_price']:.0f}\n"
-    messages.append(losers_msg)
+    # BEARISH STOCKS with full details
+    if not bearish_stocks.empty:
+        bearish = bearish_stocks.sort_values('score', ascending=False).head(10)
+        msg = f"🔴 *BEARISH STOCKS (May Go Down)* - Top {len(bearish)}\n"
+        msg += "━" * 28 + "\n"
+        for _, s in bearish.iterrows():
+            target_pct = ((s['target']/s['current_price'])-1)*100
+            stop_pct = ((s['stop_loss']/s['current_price'])-1)*100
+            pe = f"P/E:{s['pe_ratio']:.1f}" if s.get('pe_ratio') else "P/E:N/A"
+            roe_str = f"ROE:{s['roe']*100:.0f}%" if s.get('roe') else ""
+            
+            msg += f"■ *{s['symbol']}* ₹{s['current_price']:.0f} ({s['per_change']:+.2f}%)\n"
+            msg += f"  🎯 Target: ₹{s['target']:.0f} ({target_pct:.0f}%)\n"
+            msg += f"  🛡️ Stop: ₹{s['stop_loss']:.0f} (+{stop_pct:.0f}%)\n"
+            msg += f"  ⏱️ {s['timeframe']} | {pe} {roe_str}\n"
+            msg += f"  📊 {s['reasoning'][:60]}...\n\n"
+        messages.append(msg)
     
-    # Budget Stocks
-    below_1000 = df_sorted[df_sorted["current_price"] < 1000].sort_values(by=["per_change"], ascending=False)
-    if not below_1000.empty:
-        budget_msg = f"💰 *Budget (<₹1000)* - {len(below_1000)} stocks\n"
-        for _, row in below_1000.head(8).iterrows():
-            budget_msg += f"• {row['symbol']}: ₹{row['current_price']:.0f} ({row['per_change']:+.2f}%)\n"
-        messages.append(budget_msg)
+    # TOP MOVERS for context
+    msg = f"📈 *TOP MOVERS Today*\n"
+    msg += "━" * 28 + "\n"
+    msg += f"🟢 *Top Gainers:*\n"
+    for _, s in df_sorted.head(3).iterrows():
+        msg += f"  {s['symbol']}: +{s['per_change']:.2f}% ₹{s['current_price']:.0f}\n"
+    msg += f"\n🔴 *Top Losers:*\n"
+    for _, s in df_sorted.tail(3).iterrows():
+        msg += f"  {s['symbol']}: {s['per_change']:.2f}% ₹{s['current_price']:.0f}\n"
+    messages.append(msg)
+    
+    # Budget stocks
+    below = df_sorted[df_sorted["current_price"] < 1000]
+    if not below.empty:
+        msg = f"💰 *BUDGET STOCKS (<₹1000)*\n"
+        for _, s in below.head(5).iterrows():
+            msg += f"  {s['symbol']}: ₹{s['current_price']:.0f} ({s['per_change']:+.2f}%)\n"
+        messages.append(msg)
     
     return messages
+
+def create_telegram_alerts(df):
+    """Legacy function - just call new prediction alerts."""
+    return create_prediction_alerts(df)
 
 def main():
     st.set_page_config(
@@ -462,29 +527,37 @@ def main():
     is_triggered = query_params.get("trigger", "") == TRIGGER_PARAM
     
     if is_triggered:
-        st.info(f"🔔 Trigger Mode: {TRIGGER_PARAM}")
+        st.info("🔔 Trigger Mode: Sending predictions...")
         df = fetch_market_data()
+        
         if df is not None:
-            messages = create_telegram_alerts(df)
-            st.write("### Messages Preview:")
-            for i, msg in enumerate(messages):
-                st.text_area(f"Message {i+1}", msg, height=150)
+            # Generate prediction messages
+            messages = create_prediction_alerts(df)
             
-            # Try to send to Telegram if credentials exist
+            # Show preview
+            for i, msg in enumerate(messages):
+                st.code(msg[:500], language="markdown")
+            
+            # Try sending
             bot_token = st.secrets.get("BOT_TOKEN", "")
             chat_id = st.secrets.get("CHAT_ID", "")
             
-            if bot_token and chat_id and "your_" not in bot_token:
+            sent = 0
+            failed = 0
+            
+            if bot_token and chat_id and len(bot_token) > 20:
                 for msg in messages:
-                    send_telegram_msg(msg)
-                st.success(f"✅ Sent {len(messages)} messages!")
+                    result = send_telegram_msg(msg)
+                    if result.get("success"):
+                        sent += 1
+                    else:
+                        failed += 1
             else:
-                st.warning("⚠️ Telegram not configured - showing preview only")
-                return {"status": "preview", "messages": messages}
-        else:
-            st.error("❌ Failed to fetch data")
-        st.stop()
-        return
+                st.warning(f"⚠️ Telegram not configured. Add BOT_TOKEN and CHAT_ID to secrets.")
+                st.json({"bot_configured": False, "preview_count": len(messages)})
+            
+            st.success(f"✅ Sent: {sent}/{len(messages)} | Failed: {failed}")
+            return {"sent": sent, "failed": failed, "total": len(messages)}
     
     df = fetch_market_data()
     
@@ -573,88 +646,187 @@ def main():
             st.info("No bearish stocks detected")
     
     with tab2:
-        selected = st.selectbox("Select Stock", df_sorted['symbol'].tolist())
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            custom_symbol = st.text_input("Enter Stock Symbol (e.g., INFY, SBIN, RELIANCE)", "").upper().strip()
+        with col2:
+            st.write("")
+            st.write("")
+            use_custom = st.button("Fetch Details")
         
-        if selected:
-            s = df_sorted[df_sorted['symbol'] == selected].iloc[0]
+        selected = None
+        custom_data = None
+        
+        if custom_symbol and use_custom:
+            with st.spinner(f"Fetching {custom_symbol}..."):
+                try:
+                    ticker = yf.Ticker(f"{custom_symbol}.NS")
+                    hist = ticker.history(period="2d")
+                    info = ticker.info
+                    
+                    if hist.empty:
+                        st.error(f"Stock not found: {custom_symbol}")
+                    else:
+                        current = hist['Close'].iloc[-1]
+                        prev = hist['Close'].iloc[-2] if len(hist) > 1 else current
+                        pct = ((current - prev) / prev) * 100
+                        
+                        custom_data = {
+                            'symbol': custom_symbol,
+                            'company': info.get('longName', info.get('shortName', custom_symbol)),
+                            'current_price': current,
+                            'per_change': pct,
+                            'change_amount': current - prev,
+                            'open': float(hist['Open'].iloc[-1]),
+                            'prev_close': prev,
+                            'todays_high': float(hist['High'].max()),
+                            'todays_low': float(hist['Low'].min()),
+                            'week_52_high': info.get('fiftyTwoWeekHigh'),
+                            'week_52_low': info.get('fiftyTwoWeekLow'),
+                            'volume': info.get('volume'),
+                            'avg_volume': info.get('averageVolume'),
+                            'fifty_day_avg': info.get('fiftyDayAverage'),
+                            'two_hundred_day_avg': info.get('twoHundredDayAverage'),
+                            'market_cap': info.get('marketCap'),
+                            'pe_ratio': info.get('trailingPE'),
+                            'pb_ratio': info.get('priceToBook'),
+                            'roe': info.get('returnOnEquity'),
+                            'eps': info.get('trailingEps'),
+                            'beta': info.get('beta'),
+                            'sector': info.get('sector'),
+                            'industry': info.get('industry'),
+                            'founded': None
+                        }
+                        selected = custom_symbol
+                except Exception as e:
+                    st.error(f"Error: {e}")
+        
+        if not selected and not custom_data:
+            selected = st.selectbox("Or select from Nifty 50", [""] + df_sorted['symbol'].tolist())
+            if selected:
+                custom_data = df_sorted[df_sorted['symbol'] == selected].iloc[0].to_dict()
+        
+        if custom_data:
+            s = custom_data
             
-            # Price Header
-            price_change = s['change_amount']
-            pct_change = s['per_change']
-            st.metric("Price", f"₹{s['current_price']:.2f}", delta=f"{price_change:+.2f} ({pct_change:+.2f}%)")
-            
-            # Get recommendation
+            # Price & Prediction
+            st.metric("Price", f"₹{s['current_price']:.2f}", delta=f"{s['per_change']:+.2f}%")
             rec = get_recommendation(s)
             
-            # Bullish/Bearish header
-            if "BUY" in rec['action']:
-                st.success(f"🟢 {rec['action']} - Predicted to GO UP in {rec['timeframe']}")
-            elif "SELL" in rec['action']:
-                st.error(f"🔴 {rec['action']} - Predicted to go DOWN in {rec['timeframe']}")
+            if "BUY" in rec.get('action', ''):
+                st.success(f"🟢 {rec['action']} - Predicted UP ({rec['timeframe']})")
+            elif "SELL" in rec.get('action', ''):
+                st.error(f"🔴 {rec['action']} - Predicted DOWN ({rec['timeframe']})")
             else:
-                st.warning(f"⚪ {rec['action']} - Hold for {rec['timeframe']}")
+                st.warning(f"⚪ HOLD ({rec.get('timeframe', '2-4 weeks')})")
             
-            # Target and Stop Loss
             c1, c2 = st.columns(2)
-            with c1:
-                st.info(f"🎯 Target: ₹{rec['target']:.2f} (+{((rec['target']/s['current_price']-1)*100):.1f}%)")
-            with c2:
-                st.warning(f"🛡️ Stop Loss: ₹{rec['stop_loss']:.2f} ({((rec['stop_loss']/s['current_price']-1)*100):.1f}%)")
+            c1.info(f"🎯 Target: ₹{rec['target']:.0f} (+{((rec['target']/s['current_price']-1)*100):.0f}%)")
+            c2.warning(f"🛡️ Stop: ₹{rec['stop_loss']:.0f} ({((rec['stop_loss']/s['current_price']-1)*100):.0f}%)")
             
-            # Detailed Analysis
-            with st.expander("📊 Analysis Breakdown", expanded=True):
-                st.write(f"**Signal Score:** {rec['score']}")
-                st.write("**Reasons:**")
-                for sig in rec['signals']:
-                    emoji = "🟢" if sig[1] > 0 else "🔴"
-                    st.write(f"  {emoji} {sig[0]}")
+            with st.expander("📊 Analysis"):
+                st.write(f"**Score:** {rec.get('score', 0)}")
+                for sig in rec.get('signals', []):
+                    st.write(f"  {'🟢' if sig[1] > 0 else '🔴'} {sig[0]}")
             
-            # Tabs
-            p_tab, f_tab, a_tab, n_tab = st.tabs(["Performance", "Fundamentals", "About", "📰 News"])
+# Tabs
+            p_tab, f_tab, a_tab, n_tab = st.tabs(["⚡ Performance", "💼 Fundamentals", "🏢 About", "📰 News"])
             
             with p_tab:
+                st.markdown("### 📊 Price Information")
                 c1, c2 = st.columns(2)
                 with c1:
-                    st.write("**Today's High**", f"₹{s['todays_high']:.2f}")
-                    st.write("**52W High**", f"₹{s['week_52_high']:.2f}" if s['week_52_high'] else "N/A")
-                    st.write("**Open**", f"₹{s['open']:.2f}")
+                    st.markdown("**Today's High:**")
+                    st.markdown("**52W High:**")
+                    st.markdown("**Open:**")
+                    st.markdown("**Avg Volume:**")
                 with c2:
-                    st.write("**Today's Low**", f"₹{s['todays_low']:.2f}")
-                    st.write("**52W Low**", f"₹{s['week_52_low']:.2f}" if s['week_52_low'] else "N/A")
-                    st.write("**Prev Close**", f"₹{s['prev_close']:.2f}")
-                
-                st.write("**Volume**", format_volume(s['volume']))
-                st.write("**Avg Volume**", format_volume(s['avg_volume']))
-                st.write("**50 Day Avg**", f"₹{s['fifty_day_avg']:.2f}" if s['fifty_day_avg'] else "N/A")
+                    high = s.get('todays_high', 0)
+                    st.markdown(f"₹{high:,.2f}")
+                    w52h = s.get('week_52_high', 0)
+                    st.markdown(f"₹{w52h:,.2f}" if w52h else "N/A")
+                    st.markdown(f"₹{s.get('open', 0):,.2f}")
+                    st.markdown(format_volume(s.get('avg_volume')))
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.markdown("**Today's Low:**")
+                    st.markdown("**52W Low:**")
+                    st.markdown("**Prev Close:**")
+                    st.markdown("**Volume:**")
+                with c2:
+                    low = s.get('todays_low', 0)
+                    st.markdown(f"₹{low:,.2f}")
+                    w52l = s.get('week_52_low', 0)
+                    st.markdown(f"₹{w52l:,.2f}" if w52l else "N/A")
+                    st.markdown(f"₹{s.get('prev_close', 0):,.2f}")
+                    st.markdown(format_volume(s.get('volume')))
             
             with f_tab:
+                st.markdown("### 💰 Valuation")
                 c1, c2 = st.columns(2)
                 with c1:
-                    st.write("**Market Cap**", format_market_cap(s['market_cap']) if s['market_cap'] else "N/A")
-                    st.write("**P/E Ratio**", f"{s['pe_ratio']:.2f}" if s['pe_ratio'] else "N/A")
-                    st.write("**P/B Ratio**", f"{s['pb_ratio']:.2f}" if s['pb_ratio'] else "N/A")
+                    st.markdown("**Market Cap:**")
+                    st.markdown("**P/E Ratio:**")
+                    st.markdown("**P/B Ratio:**")
                 with c2:
-                    st.write("**ROE**", f"{s['roe']*100:.2f}%" if s['roe'] else "N/A")
-                    st.write("**EPS**", f"₹{s['eps']:.2f}" if s['eps'] else "N/A")
-                    st.write("**Beta**", f"{s['beta']:.2f}" if s['beta'] else "N/A")
+                    mc = s.get('market_cap')
+                    st.markdown(format_market_cap(mc) if mc else "N/A")
+                    pe = s.get('pe_ratio', 0)
+                    st.markdown(f"{pe:.2f}" if pe else "N/A")
+                    pb = s.get('pb_ratio', 0)
+                    st.markdown(f"{pb:.2f}" if pb else "N/A")
+                
+                st.markdown("### 📈 Profitability")
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.markdown("**ROE:**")
+                    st.markdown("**EPS:**")
+                    st.markdown("**Beta:**")
+                with c2:
+                    roe = s.get('roe', 0)
+                    st.markdown(f"{roe*100:.1f}%" if roe else "N/A")
+                    eps = s.get('eps', 0)
+                    st.markdown(f"₹{eps:.2f}" if eps else "N/A")
+                    beta = s.get('beta', 0)
+                    st.markdown(f"{beta:.2f}" if beta else "N/A")
             
             with a_tab:
-                st.write("**Company**", s['company'])
-                st.write("**Industry**", s['industry'])
-                st.write("**NSE Symbol**", s['nse_symbol'])
-                if s.get('founded'):
-                    st.write("**Founded**", s['founded'])
+                st.markdown("### 🏢 Company Information")
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.markdown("**Company:**")
+                    st.markdown("**Industry:**")
+                    st.markdown("**Sector:**")
+                with c2:
+                    st.markdown(f"**{s.get('company', s.get('symbol'))}**")
+                    st.markdown(s.get('industry', 'N/A'))
+                    st.markdown(s.get('sector', 'N/A'))
+                
+                st.markdown("### 📊 Moving Averages")
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.markdown("**50 Day Avg:**")
+                    st.markdown("**200 Day Avg:**")
+                with c2:
+                    dma50 = s.get('fifty_day_avg', 0)
+                    st.markdown(f"₹{dma50:,.2f}" if dma50 else "N/A")
+                    dma200 = s.get('two_hundred_day_avg', 0)
+                    st.markdown(f"₹{dma200:,.2f}" if dma200 else "N/A")
             
             with n_tab:
-                news = fetch_stock_news(selected)
-                if news:
-                    for item in news[:5]:
-                        with st.expander(item.get("title", "No title")[:80]):
-                            st.write(item.get("content", ""))
-                            if item.get("link"):
-                                st.markdown(f"[Read more]({item['link']})")
+                st.subheader(f"📰 News for {selected}")
+                if selected:
+                    news = fetch_stock_news(selected)
+                    if news:
+                        for item in news[:5]:
+                            with st.expander(item.get("title", "No title")[:80]):
+                                st.write(item.get("content", ""))
+                                if item.get("link"):
+                                    st.markdown(f"[Read more]({item['link']})")
+                    else:
+                        st.info("No recent news available")
                 else:
-                    st.info("No recent news available")
+                    st.info("Select a stock to view news")
     
     with tab3:
         st.subheader("🔔 Telegram Alerts")

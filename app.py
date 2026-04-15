@@ -81,19 +81,19 @@ def fetch_market_data():
         for symbol in NIFTY50_TICKERS:
             try:
                 ticker = yf.Ticker(symbol)
-                hist = ticker.history(period="2d", timeout=15)
+                hist = ticker.history(period="5d", timeout=15)
                 if hist.empty:
                     continue
                 
-                close_price = hist['Close'].iloc[-1]
-                if pd.isna(close_price) or close_price <= 0:
+                close_vals = hist['Close'].dropna()
+                if close_vals.empty:
                     continue
                 
                 sym = symbol.replace('.NS', '')
-                current_price = float(close_price)
+                current_price = float(close_vals.iloc[-1])
                 
-                if len(hist) > 1 and not pd.isna(hist['Close'].iloc[-2]):
-                    previous_close = float(hist['Close'].iloc[-2])
+                if len(close_vals) > 1:
+                    previous_close = float(close_vals.iloc[-2])
                 else:
                     previous_close = current_price
                 pct_change = ((current_price - previous_close) / previous_close) * 100 if previous_close > 0 else 0
@@ -550,17 +550,22 @@ def main():
                     if hist.empty:
                         st.error("Stock not found")
                     else:
-                        info = ticker.info
-                        current = hist['Close'].iloc[-1]
-                        prev = hist['Close'].iloc[-2] if len(hist) > 1 else current
-                        pct = ((current - prev) / prev) * 100
-                        
-                        stock_data = {
-                            'symbol': custom_symbol,
-                            'company': info.get('longName', info.get('shortName', custom_symbol)),
-                            'current_price': float(current),
-                            'per_change': float(pct),
-                            'change_amount': float(current - prev),
+                        close_vals = hist['Close'].dropna()
+                        if close_vals.empty:
+                            st.error("No price data")
+                        else:
+                            current = float(close_vals.iloc[-1])
+                            prev = float(close_vals.iloc[-2]) if len(close_vals) > 1 else current
+                            pct = ((current - prev) / prev) * 100 if prev > 0 else 0
+                            
+                            info = ticker.info
+                            stock_data = {
+                                'symbol': custom_symbol,
+                                'company': info.get('longName', info.get('shortName', custom_symbol)),
+                                'current_price': current,
+                                'per_change': pct,
+                            },
+                            'change_amount': current - prev,
                             'open': float(hist['Open'].iloc[-1]),
                             'prev_close': float(prev),
                             'todays_high': float(hist['High'].max()),

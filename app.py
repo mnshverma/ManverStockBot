@@ -404,39 +404,48 @@ def fetch_market_news():
         return []
 
 def send_telegram_msg(message, debug=False):
-    """Send Markdown-formatted alert to Telegram."""
+    """Send Telegram message."""
     try:
-        bot_token = st.secrets.get("BOT_TOKEN", "")
-        chat_id = st.secrets.get("CHAT_ID", "")
+        # Try all possible secret names (case insensitive)
+        bot_token = (
+            st.secrets.get("BOT_TOKEN") or 
+            st.secrets.get("bot_token") or 
+            st.secrets.get("BOT_TOKEN", "") or
+            st.secrets.get("bot_token", "")
+        )
+        chat_id = (
+            st.secrets.get("CHAT_ID") or 
+            st.secrets.get("chat_id") or 
+            st.secrets.get("CHAT_ID", "") or 
+            st.secrets.get("chat_id", "")
+        )
+        
+        if bot_token:
+            bot_token = bot_token.strip()
+        if chat_id:
+            chat_id = chat_id.strip()
         
         if not bot_token or not chat_id:
-            return {"success": False, "error": "Credentials not set"}
+            return {"success": False, "error": "Credentials missing in secrets.toml"}
         
-        # Skip validation if already has proper length
-        if len(bot_token) < 30:
-            return {"success": False, "error": "BOT_TOKEN too short"}
-        if len(chat_id) < 5:
-            return {"success": False, "error": "CHAT_ID too short"}
-        
-        if not chat_id.isdigit():
-            return {"success": False, "error": "CHAT_ID must be numbers only"}
+        if debug:
+            st.write(f"Token preview: {bot_token[:10]}... (len={len(bot_token)})")
+            st.write(f"Chat ID: {chat_id}")
         
         url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
         payload = {"chat_id": chat_id, "text": message, "parse_mode": "Markdown"}
         response = requests.post(url, json=payload, timeout=30)
         
         if debug:
-            st.write(f"TG Response: {response.status_code} - {response.text[:300]}")
+            st.write(f"Response: {response.status_code} - {response.text[:200]}")
         
         if response.status_code == 200:
             return {"success": True}
         else:
             try:
-                err = response.json().get("description", "Unknown error")
+                err = response.json().get("description", response.text)
             except:
                 err = response.text[:100]
-            if "Forbidden" in err:
-                return {"success": False, "error": "Start chat with bot on Telegram first!"}
             return {"success": False, "error": err}
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -572,24 +581,25 @@ def main():
             for i, msg in enumerate(messages):
                 st.code(msg[:500], language="markdown")
             
-            bot_token = st.secrets.get("BOT_TOKEN", "")
-            chat_id = st.secrets.get("CHAT_ID", "")
-            
-            st.write(f"Bot Token length: {len(bot_token)} | Chat ID: {chat_id}")
+            # Try reading secrets both ways
+        bot_token = st.secrets.get("BOT_TOKEN", st.secrets.get("bot_token", "")).strip()
+        chat_id = st.secrets.get("CHAT_ID", st.secrets.get("chat_id", "")).strip()
+        
+        st.markdown(f"**Debug:** Token=`{bot_token[:10]}...` len={len(bot_token)}, ChatID=`{chat_id}`")
             
             sent = 0
             failed = 0
             
-            if bot_token and chat_id and len(bot_token) > 20:
+            if len(bot_token) > 30 and chat_id.isdigit():
                 for msg in messages:
                     result = send_telegram_msg(msg, debug=True)
                     if result.get("success"):
                         sent += 1
                     else:
-                        st.error(f"❌ {result.get('error', 'Unknown error')}")
+                        st.error(f"❌ {result.get('error', 'Unknown')}")
                         failed += 1
             else:
-                st.warning("⚠️ Add BOT_TOKEN & CHAT_ID to secrets.toml")
+                st.warning(f"⚠️ Token len={len(bot_token)}, Chat ID isnumeric={chat_id.isdigit()}")
             
             st.success(f"✅ Sent: {sent} | Failed: {failed}")
             return {"sent": sent, "failed": failed, "total": len(messages)}

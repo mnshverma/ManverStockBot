@@ -499,26 +499,25 @@ def main():
     
     with tab1:
         df_display = df_sorted[['symbol', 'company', 'current_price', 'per_change']].copy()
-        df_display['change_%'] = df_display['per_change'].apply(lambda x: f"{x:+.2f}%")
-        df_display = df_display.rename(columns={'current_price': 'price', 'per_change': 'change_%'})
+        df_display['change_pct'] = df_display['per_change'].apply(lambda x: f"{x:+.2f}%")
         
         st.subheader("📈 Top Gainers of the Day")
-        st.dataframe(df_display.head(5)[['symbol', 'company', 'price', 'change_%']], use_container_width=True, hide_index=True)
+        st.dataframe(df_display.head(5)[['symbol', 'company', 'current_price', 'change_pct']], use_container_width=True, hide_index=True)
         
         st.subheader("📉 Top Losers of the Day")
-        st.dataframe(df_display.tail(5)[['symbol', 'company', 'price', 'change_%']], use_container_width=True, hide_index=True)
+        st.dataframe(df_display.tail(5)[['symbol', 'company', 'current_price', 'change_pct']], use_container_width=True, hide_index=True)
         
         st.subheader("🟢 Predicted BULLISH (May Go Up)")
         if not pred_bullish.empty:
-            pred_display = pred_bullish[['symbol', 'current_price', 'per_change', 'target', 'timeframe']].copy()
-            pred_display['change_%'] = pred_display['per_change'].apply(lambda x: f"{x:+.2f}%")
-            st.dataframe(pred_display[['symbol', 'current_price', 'change_%']], hide_index=True)
+            pred_display = pred_bullish[['symbol', 'current_price', 'per_change']].copy()
+            pred_display['change_pct'] = pred_display['per_change'].apply(lambda x: f"{x:+.2f}%")
+            st.dataframe(pred_display[['symbol', 'current_price', 'change_pct']], hide_index=True)
         
         st.subheader("🔴 Predicted BEARISH (May Go Down)")
         if not pred_bearish.empty:
-            pred_display = pred_bearish[['symbol', 'current_price', 'per_change', 'target', 'timeframe']].copy()
-            pred_display['change_%'] = pred_display['per_change'].apply(lambda x: f"{x:+.2f}%")
-            st.dataframe(pred_display[['symbol', 'current_price', 'change_%']], hide_index=True)
+            pred_display = pred_bearish[['symbol', 'current_price', 'per_change']].copy()
+            pred_display['change_pct'] = pred_display['per_change'].apply(lambda x: f"{x:+.2f}%")
+            st.dataframe(pred_display[['symbol', 'current_price', 'change_pct']], hide_index=True)
     
     with tab2:
         col1, col2 = st.columns([2, 1])

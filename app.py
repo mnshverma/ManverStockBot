@@ -406,8 +406,8 @@ def fetch_market_news():
 def send_telegram_msg(message, debug=False):
     """Send Telegram message."""
     try:
-        bot_token = st.secrets.get("BOT_TOKEN", "").strip()
-        chat_id = st.secrets.get("CHAT_ID", "").strip()
+        bot_token = str(st.secrets.get("BOT_TOKEN", "")).strip()
+        chat_id = str(st.secrets.get("CHAT_ID", "")).strip()
         
         if not bot_token or not chat_id:
             return {"success": False, "error": "Credentials missing in secrets.toml"}
@@ -565,9 +565,9 @@ def main():
             for i, msg in enumerate(messages):
                 st.code(msg[:500], language="markdown")
             
-            # Read secrets
-            bot_token = st.secrets.get("BOT_TOKEN", "").strip()
-            chat_id = st.secrets.get("CHAT_ID", "").strip()
+            # Read secrets safely
+            bot_token = str(st.secrets.get("BOT_TOKEN", "")).strip()
+            chat_id = str(st.secrets.get("CHAT_ID", "")).strip()
             
             st.markdown(f"**Debug:** Token=`{bot_token[:8]}...` len={len(bot_token)}, ChatID=`{chat_id}`")
             

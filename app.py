@@ -857,12 +857,12 @@ def main():
                             link = item.get("link", "") or item.get("url", "")
                             
                             # Clean display
-                            st.markdown(f"**{title[:65]}**")
+                            st.markdown(f"**📰 {title[:65]}**")
                             if content and content != "None":
                                 st.caption(content)
-                            if link and "http" in link:
-                                st.markdown(f"[📖 Read More]({link})")
-                            st.markdown(":male-doctor: ---")
+                            if link and "http" in str(link):
+                                st.markdown(f"[🔗 Read More]({link})")
+                            st.markdown("---")
                     else:
                         st.info("No news available for this stock")
                 else:

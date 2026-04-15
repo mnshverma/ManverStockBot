@@ -849,22 +849,26 @@ def main():
                     st.markdown(f"### 📰 Latest News for {selected_stock}")
                     news = fetch_stock_news(selected_stock)
                     
-                    st.markdown("---")
                     if news and len(news) > 0:
                         for idx, item in enumerate(news[:5]):
-                            title = str(item.get("title", "")) if item.get("title") else "Latest Update"
-                            content = str(item.get("summary", "") or item.get("content", "") or item.get("description", ""))[:150]
-                            link = item.get("link", "") or item.get("url", "")
+                            # Extract clean data from dict
+                            title = item.get("title", "")
+                            if isinstance(title, dict):
+                                title = str(title.get("title", ""))[:50]
+                            content = (item.get("summary") or item.get("content", "") or "")[:80]
+                            link = (item.get("link") or item.get("url") or "")
                             
-                            # Clean display
-                            st.markdown(f"**📰 {title[:65]}**")
-                            if content and content != "None":
-                                st.caption(content)
+                            # Display as one-liner
+                            text = f"**{idx+1}.** {title}"
+                            if content != "None":
+                                text += f" - {content}"
+                            
                             if link and "http" in str(link):
-                                st.markdown(f"[🔗 Read More]({link})")
-                            st.markdown("---")
+                                text += f" [🔗]({link})"
+                            
+                            st.markdown(text)
                     else:
-                        st.info("No news available for this stock")
+                        st.info("No news available")
                 else:
                     st.info("Select a stock to view news")
     

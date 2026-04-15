@@ -437,12 +437,25 @@ def main():
         df = fetch_market_data()
         if df is not None:
             messages = create_telegram_alerts(df)
-            for msg in messages:
-                send_telegram_msg(msg)
-            st.success(f"Sent {len(messages)} messages!")
+            st.write("### Messages Preview:")
+            for i, msg in enumerate(messages):
+                st.text_area(f"Message {i+1}", msg, height=150)
+            
+            # Try to send to Telegram if credentials exist
+            bot_token = st.secrets.get("BOT_TOKEN", "")
+            chat_id = st.secrets.get("CHAT_ID", "")
+            
+            if bot_token and chat_id and "your_" not in bot_token:
+                for msg in messages:
+                    send_telegram_msg(msg)
+                st.success(f"✅ Sent {len(messages)} messages!")
+            else:
+                st.warning("⚠️ Telegram not configured - showing preview only")
+                return {"status": "preview", "messages": messages}
         else:
-            st.error("Failed to fetch data")
+            st.error("❌ Failed to fetch data")
         st.stop()
+        return
     
     df = fetch_market_data()
     

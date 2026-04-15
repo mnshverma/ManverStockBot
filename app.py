@@ -349,11 +349,36 @@ def get_recommendation(s):
 
 @st.cache_data(ttl=1800)
 def fetch_stock_news(symbol):
-    """Fetch news for a stock using Yahoo Finance."""
+    """Fetch news for a stock."""
     try:
         ticker = yf.Ticker(f"{symbol}.NS")
-        news = ticker.news
-        return news if news else []
+        
+        # Try Yahoo Finance news
+        try:
+            news = ticker.news
+            if news and len(news) > 0:
+                return news
+        except:
+            pass
+        
+        # Get basic info as fallback
+        try:
+            info = ticker.info
+        except:
+            info = {}
+        
+        company_name = info.get('longName', info.get('shortName', symbol))
+        
+        # Return fallback with helpful links
+        return [{
+            'title': f"📊 {company_name} - NSE:{symbol}",
+            'content': f"Company: {company_name}\n\nFor detailed analysis and news, visit:",
+            'link': f"https://groww.in/stocks/{symbol.lower()}-ltd"
+        }, {
+            'title': f"📈 {symbol} Stock Quote",
+            'content': f"Track {symbol} on MoneyControl for latest updates",
+            'link': f"https://www.moneycontrol.com/stocks/stockquote/{symbol.lower()}"
+        }]
     except:
         return []
 
@@ -567,15 +592,6 @@ def main():
     
     df_sorted = df.sort_values(by=["per_change"], ascending=False).reset_index(drop=True)
     
-    # Summary at top
-    avg = df_sorted["per_change"].mean()
-    
-    c1, c2 = st.columns(2)
-    c1.metric("Nifty 50 Avg Change", f"{avg:+.2f}%")
-    c2.metric("Total Stocks", len(df_sorted))
-    
-    st.divider()
-    
     # Get Bullish and Bearish predictions for all stocks
     predictions = []
     for _, row in df_sorted.iterrows():
@@ -646,65 +662,67 @@ def main():
             st.info("No bearish stocks detected")
     
     with tab2:
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            custom_symbol = st.text_input("Enter Stock Symbol (e.g., INFY, SBIN, RELIANCE)", "").upper().strip()
-        with col2:
-            st.write("")
-            st.write("")
-            use_custom = st.button("Fetch Details")
+        # Two options: dropdown or custom search
+        search_option = st.radio("Choose:", ["Select from Nifty 50", "Enter Custom Symbol"], horizontal=True)
         
-        selected = None
-        custom_data = None
+        selected_stock = None
+        stock_data = None
         
-        if custom_symbol and use_custom:
-            with st.spinner(f"Fetching {custom_symbol}..."):
-                try:
-                    ticker = yf.Ticker(f"{custom_symbol}.NS")
-                    hist = ticker.history(period="2d")
-                    info = ticker.info
-                    
-                    if hist.empty:
-                        st.error(f"Stock not found: {custom_symbol}")
-                    else:
-                        current = hist['Close'].iloc[-1]
-                        prev = hist['Close'].iloc[-2] if len(hist) > 1 else current
-                        pct = ((current - prev) / prev) * 100
+        if search_option == "Select from Nifty 50":
+            nifty_choice = st.selectbox("Choose Stock", df_sorted['symbol'].tolist())
+            if nifty_choice:
+                stock_data = df_sorted[df_sorted['symbol'] == nifty_choice].iloc[0].to_dict()
+                selected_stock = nifty_choice
+        else:
+            custom_symbol = st.text_input("Enter Symbol (e.g., INFY, SBIN)", "").upper().strip()
+            if custom_symbol and st.button("Fetch", use_container_width=True):
+                with st.spinner("Loading..."):
+                    try:
+                        import time
+                        time.sleep(0.3)
+                        ticker = yf.Ticker(f"{custom_symbol}.NS")
+                        hist = ticker.history(period="2d", timeout=15)
                         
-                        custom_data = {
-                            'symbol': custom_symbol,
-                            'company': info.get('longName', info.get('shortName', custom_symbol)),
-                            'current_price': current,
-                            'per_change': pct,
-                            'change_amount': current - prev,
-                            'open': float(hist['Open'].iloc[-1]),
-                            'prev_close': prev,
-                            'todays_high': float(hist['High'].max()),
-                            'todays_low': float(hist['Low'].min()),
-                            'week_52_high': info.get('fiftyTwoWeekHigh'),
-                            'week_52_low': info.get('fiftyTwoWeekLow'),
-                            'volume': info.get('volume'),
-                            'avg_volume': info.get('averageVolume'),
-                            'fifty_day_avg': info.get('fiftyDayAverage'),
-                            'two_hundred_day_avg': info.get('twoHundredDayAverage'),
-                            'market_cap': info.get('marketCap'),
-                            'pe_ratio': info.get('trailingPE'),
-                            'pb_ratio': info.get('priceToBook'),
-                            'roe': info.get('returnOnEquity'),
-                            'eps': info.get('trailingEps'),
-                            'beta': info.get('beta'),
-                            'sector': info.get('sector'),
-                            'industry': info.get('industry'),
-                            'founded': None
-                        }
-                        selected = custom_symbol
-                except Exception as e:
-                    st.error(f"Error: {e}")
+                        if hist.empty:
+                            st.error("Stock not found")
+                        else:
+                            info = ticker.info
+                            current = hist['Close'].iloc[-1]
+                            prev = hist['Close'].iloc[-2] if len(hist) > 1 else current
+                            pct = ((current - prev) / prev) * 100
+                            
+                            stock_data = {
+                                'symbol': custom_symbol,
+                                'company': info.get('longName', info.get('shortName', custom_symbol)),
+                                'current_price': float(current),
+                                'per_change': float(pct),
+                                'change_amount': float(current - prev),
+                                'open': float(hist['Open'].iloc[-1]),
+                                'prev_close': float(prev),
+                                'todays_high': float(hist['High'].max()),
+                                'todays_low': float(hist['Low'].min()),
+                                'week_52_high': info.get('fiftyTwoWeekHigh'),
+                                'week_52_low': info.get('fiftyTwoWeekLow'),
+                                'volume': info.get('volume'),
+                                'avg_volume': info.get('averageVolume'),
+                                'fifty_day_avg': info.get('fiftyDayAverage'),
+                                'two_hundred_day_avg': info.get('twoHundredDayAverage'),
+                                'market_cap': info.get('marketCap'),
+                                'pe_ratio': info.get('trailingPE'),
+                                'pb_ratio': info.get('priceToBook'),
+                                'roe': info.get('returnOnEquity'),
+                                'eps': info.get('trailingEps'),
+                                'beta': info.get('beta'),
+                                'sector': info.get('sector'),
+                                'industry': info.get('industry'),
+                                'founded': None
+                            }
+                            selected_stock = custom_symbol
+                    except Exception as e:
+                        st.error(f"Error: {str(e)[:80]}")
         
-        if not selected and not custom_data:
-            selected = st.selectbox("Or select from Nifty 50", [""] + df_sorted['symbol'].tolist())
-            if selected:
-                custom_data = df_sorted[df_sorted['symbol'] == selected].iloc[0].to_dict()
+        if stock_data:
+            s = stock_data
         
         if custom_data:
             s = custom_data
@@ -741,11 +759,12 @@ def main():
                     st.markdown("**Open:**")
                     st.markdown("**Avg Volume:**")
                 with c2:
-                    high = s.get('todays_high', 0)
-                    st.markdown(f"₹{high:,.2f}")
-                    w52h = s.get('week_52_high', 0)
+                    high = s.get('todays_high')
+                    st.markdown(f"₹{high:,.2f}" if high else "N/A")
+                    w52h = s.get('week_52_high')
                     st.markdown(f"₹{w52h:,.2f}" if w52h else "N/A")
-                    st.markdown(f"₹{s.get('open', 0):,.2f}")
+                    open_p = s.get('open')
+                    st.markdown(f"₹{open_p:,.2f}" if open_p else "N/A")
                     st.markdown(format_volume(s.get('avg_volume')))
                 c1, c2 = st.columns(2)
                 with c1:
@@ -754,14 +773,23 @@ def main():
                     st.markdown("**Prev Close:**")
                     st.markdown("**Volume:**")
                 with c2:
-                    low = s.get('todays_low', 0)
-                    st.markdown(f"₹{low:,.2f}")
-                    w52l = s.get('week_52_low', 0)
+                    low = s.get('todays_low')
+                    st.markdown(f"₹{low:,.2f}" if low else "N/A")
+                    w52l = s.get('week_52_low')
                     st.markdown(f"₹{w52l:,.2f}" if w52l else "N/A")
-                    st.markdown(f"₹{s.get('prev_close', 0):,.2f}")
+                    prev = s.get('prev_close')
+                    st.markdown(f"₹{prev:,.2f}" if prev else "N/A")
                     st.markdown(format_volume(s.get('volume')))
             
             with f_tab:
+                def format_val(v, prefix="", suffix=""):
+                    """Format value safely, return N/A if None or 0"""
+                    if v is None or v == 0 or v == "0" or (isinstance(v, float) and (v != v)):  # nan check
+                        return "N/A"
+                    if isinstance(v, float):
+                        return f"{prefix}{v:,.2f}{suffix}"
+                    return f"{prefix}{v}{suffix}"
+                
                 st.markdown("### 💰 Valuation")
                 c1, c2 = st.columns(2)
                 with c1:
@@ -771,10 +799,10 @@ def main():
                 with c2:
                     mc = s.get('market_cap')
                     st.markdown(format_market_cap(mc) if mc else "N/A")
-                    pe = s.get('pe_ratio', 0)
-                    st.markdown(f"{pe:.2f}" if pe else "N/A")
-                    pb = s.get('pb_ratio', 0)
-                    st.markdown(f"{pb:.2f}" if pb else "N/A")
+                    pe = s.get('pe_ratio')
+                    st.markdown(format_val(pe) if pe is not None else "N/A")
+                    pb = s.get('pb_ratio')
+                    st.markdown(format_val(pb) if pb is not None else "N/A")
                 
                 st.markdown("### 📈 Profitability")
                 c1, c2 = st.columns(2)
@@ -783,14 +811,16 @@ def main():
                     st.markdown("**EPS:**")
                     st.markdown("**Beta:**")
                 with c2:
-                    roe = s.get('roe', 0)
+                    roe = s.get('roe')
                     st.markdown(f"{roe*100:.1f}%" if roe else "N/A")
-                    eps = s.get('eps', 0)
-                    st.markdown(f"₹{eps:.2f}" if eps else "N/A")
-                    beta = s.get('beta', 0)
-                    st.markdown(f"{beta:.2f}" if beta else "N/A")
+                    eps = s.get('eps')
+                    st.markdown(format_val(eps, "₹") if eps else "N/A")
+                    beta = s.get('beta')
+                    st.markdown(format_val(beta) if beta else "N/A")
             
             with a_tab:
+                if not selected_stock:
+                    selected_stock = stock_data.get('symbol', 'N/A')
                 st.markdown("### 🏢 Company Information")
                 c1, c2 = st.columns(2)
                 with c1:
@@ -814,17 +844,25 @@ def main():
                     st.markdown(f"₹{dma200:,.2f}" if dma200 else "N/A")
             
             with n_tab:
-                st.subheader(f"📰 News for {selected}")
-                if selected:
-                    news = fetch_stock_news(selected)
+                if selected_stock:
+                    st.markdown(f"### 📰 Latest News for {selected_stock}")
+                    news = fetch_stock_news(selected_stock)
+                    
+                    st.markdown("---")
                     if news:
-                        for item in news[:5]:
-                            with st.expander(item.get("title", "No title")[:80]):
-                                st.write(item.get("content", ""))
-                                if item.get("link"):
-                                    st.markdown(f"[Read more]({item['link']})")
+                        for idx, item in enumerate(news):
+                            title = str(item.get("title", ""))[:60] if item.get("title") else f"News {idx+1}"
+                            content = str(item.get("content", ""))[:150] if item.get("content") else "No description"
+                            link = item.get("link", "")
+                            
+                            # Show as styled card without expander
+                            st.markdown(f"**{idx+1}. {title}**")
+                            st.caption(content)
+                            if link:
+                                st.markdown(f"[🔗 View Details]({link})")
+                            st.markdown("---")
                     else:
-                        st.info("No recent news available")
+                        st.warning("No news data available")
                 else:
                     st.info("Select a stock to view news")
     

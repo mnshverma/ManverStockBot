@@ -262,24 +262,30 @@ def create_prediction_alerts(df):
     df_sorted = df.sort_values(by=["per_change"], ascending=False).reset_index(drop=True)
     
     predictions = []
+    seen_symbols = set()
     for _, row in df_sorted.iterrows():
         rec = get_recommendation(row)
-        symbol = row['symbol']
-        current_price = row.get('current_price', 0) or 0
-        per_change = row.get('per_change', 0) or 0
-        pe = row.get('pe_ratio') or 0
-        roe = row.get('roe') or 0
+        symbol = str(row.get('symbol', ''))
         
-        if current_price and current_price > 0:
+        if symbol in seen_symbols:
+            continue
+        seen_symbols.add(symbol)
+        
+        current_price = float(row.get('current_price', 0) or 0)
+        per_change = float(row.get('per_change', 0) or 0)
+        pe = float(row.get('pe_ratio') or 0)
+        roe = float(row.get('roe') or 0)
+        
+        if current_price > 0:
             if "BUY" in rec['action']:
+                target = current_price * 1.2
+                stop = current_price * 0.95
+            elif "SELL" in rec['action']:
+                target = current_price * 0.8
+                stop = current_price * 1.1
+            else:
                 target = current_price * 1.1
                 stop = current_price * 0.97
-            elif "SELL" in rec['action']:
-                target = current_price * 0.9
-                stop = current_price * 1.03
-            else:
-                target = current_price * 1.02
-                stop = current_price * 0.98
         else:
             target = 0
             stop = 0
@@ -312,69 +318,65 @@ def create_prediction_alerts(df):
         msg += f"Bearish\n"
         msg += f"-----------\n\n"
         for _, s in bearish.head(20).iterrows():
-            try:
-                price = float(s.get('current_price', 0) or 0)
-                pct = float(s.get('per_change', 0) or 0)
-                target = float(s.get('target', 0) or 0)
-                stop = float(s.get('stop', 0) or 0)
-                pe = float(s.get('pe', 0) or 0)
-                roe = float(s.get('roe', 0) or 0)
-                signals = s.get('signals', '')
-                
-                if price > 0 and target > 0 and stop > 0:
-                    msg += f"■ {s['symbol']} ₹{int(price)} ({pct:+.1f}%)\n"
-                    msg += f"  🎯 Target: ₹{int(target)} ({((target-price)/price)*100:+-.1f}%)\n"
-                    msg += f"  🛡️ Stop: ₹{int(stop)} ({((stop-price)/price)*100:+.1f}%)\n"
-                    msg += f"  ⏱️ 2-4 weeks"
-                    if pe > 0:
-                        msg += f" | P/E:{pe:.1f}"
-                    else:
-                        msg += f" | P/E:N/A"
-                    if roe > 0:
-                        msg += f" ROE:{roe*100:.0f}%"
-                    else:
-                        msg += f" ROE:N/A"
-                    msg += f"\n"
-                    if signals:
-                        msg += f"  📊 {signals}\n"
-                else:
-                    msg += f"■ {s['symbol']} (N/A)\n"
-            except:
-                msg += f"■ {s.get('symbol', 'N/A')} (Error)\n"
+            price = float(s.get('current_price', 0) or 0)
+            pct = float(s.get('per_change', 0) or 0)
+            target = float(s.get('target', 0) or 0)
+stop = float(s.get('stop', 0) or 0)
+            pe = float(s.get('pe', 0) or 0)
+            roe = float(s.get('roe', 0) or 0)
+            signals = s.get('signals', '')
+            sym = s.get('symbol', 'N/A')
+            
+            if price > 0 and not math.isnan(price):
+                msg += f"■ {sym} ₹{int(price)} ({pct:+.1f}%)\n"
+                if target > 0 and not math.isnan(target):
+                    tgt_pct = ((target-price)/price)*100
+                    if not math.isnan(tgt_pct):
+                        msg += f"  🎯 Target: ₹{int(target)} ({tgt_pct:+-.1f}%)\n"
+                if stop > 0 and not math.isnan(stop):
+                    stp_pct = ((stop-price)/price)*100
+                    if not math.isnan(stp_pct):
+                        msg += f"  🛡️ Stop: ₹{int(stop)} ({stp_pct:+.1f}%)\n"
+                msg += f"  ⏱️ 2-4 weeks"
+                if pe > 0 and not math.isnan(pe):
+                    msg += f" | P/E:{pe:.1f}"
+                if roe > 0 and not math.isnan(roe):
+                    msg += f" ROE:{roe*100:.0f}%"
+                msg += f"\n"
+                if signals:
+                    msg += f"  📊 {signals}\n"
     
     if not bullish.empty:
         msg += f"\nBullish\n"
         msg += f"-----------\n\n"
         for _, s in bullish.head(20).iterrows():
-            try:
-                price = float(s.get('current_price', 0) or 0)
-                pct = float(s.get('per_change', 0) or 0)
-                target = float(s.get('target', 0) or 0)
-                stop = float(s.get('stop', 0) or 0)
-                pe = float(s.get('pe', 0) or 0)
-                roe = float(s.get('roe', 0) or 0)
-                signals = s.get('signals', '')
-                
-                if price > 0 and target > 0 and stop > 0:
-                    msg += f"■ {s['symbol']} ₹{int(price)} ({pct:+.1f}%)\n"
-                    msg += f"  🎯 Target: ₹{int(target)} ({((target-price)/price)*100:+-.1f}%)\n"
-                    msg += f"  🛡️ Stop: ₹{int(stop)} ({((stop-price)/price)*100:+.1f}%)\n"
-                    msg += f"  ⏱️ 2-4 weeks"
-                    if pe > 0:
-                        msg += f" | P/E:{pe:.1f}"
-                    else:
-                        msg += f" | P/E:N/A"
-                    if roe > 0:
-                        msg += f" ROE:{roe*100:.0f}%"
-                    else:
-                        msg += f" ROE:N/A"
-                    msg += f"\n"
-                    if signals:
-                        msg += f"  📊 {signals}\n"
-                else:
-                    msg += f"■ {s['symbol']} (N/A)\n"
-            except:
-                msg += f"■ {s.get('symbol', 'N/A')} (Error)\n"
+            price = float(s.get('current_price', 0) or 0)
+            pct = float(s.get('per_change', 0) or 0)
+            target = float(s.get('target', 0) or 0)
+            stop = float(s.get('stop', 0) or 0)
+            pe = float(s.get('pe', 0) or 0)
+            roe = float(s.get('roe', 0) or 0)
+            signals = s.get('signals', '')
+            sym = s.get('symbol', 'N/A')
+            
+            if price > 0 and not math.isnan(price):
+                msg += f"■ {sym} ₹{int(price)} ({pct:+.1f}%)\n"
+                if target > 0 and not math.isnan(target):
+                    tgt_pct = ((target-price)/price)*100
+                    if not math.isnan(tgt_pct):
+                        msg += f"  🎯 Target: ₹{int(target)} ({tgt_pct:+-.1f}%)\n"
+                if stop > 0 and not math.isnan(stop):
+                    stp_pct = ((stop-price)/price)*100
+                    if not math.isnan(stp_pct):
+                        msg += f"  🛡️ Stop: ₹{int(stop)} ({stp_pct:+.1f}%)\n"
+                msg += f"  ⏱️ 2-4 weeks"
+                if pe > 0 and not math.isnan(pe):
+                    msg += f" | P/E:{pe:.1f}"
+                if roe > 0 and not math.isnan(roe):
+                    msg += f" ROE:{roe*100:.0f}%"
+                msg += f"\n"
+                if signals:
+                    msg += f"  📊 {signals}\n"
     
     return [msg]
 
@@ -496,19 +498,27 @@ def main():
     tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "📈 Stock Detail", "🔔 Alerts"])
     
     with tab1:
+        df_display = df_sorted[['symbol', 'company', 'current_price', 'per_change']].copy()
+        df_display['change_%'] = df_display['per_change'].apply(lambda x: f"{x:+.2f}%")
+        df_display = df_display.rename(columns={'current_price': 'price', 'per_change': 'change_%'})
+        
         st.subheader("📈 Top Gainers of the Day")
-        st.dataframe(df_sorted.head(5)[['symbol', 'company', 'current_price', 'per_change']], use_container_width=True, hide_index=True)
+        st.dataframe(df_display.head(5)[['symbol', 'company', 'price', 'change_%']], use_container_width=True, hide_index=True)
         
         st.subheader("📉 Top Losers of the Day")
-        st.dataframe(df_sorted.tail(5)[['symbol', 'company', 'current_price', 'per_change']], use_container_width=True, hide_index=True)
+        st.dataframe(df_display.tail(5)[['symbol', 'company', 'price', 'change_%']], use_container_width=True, hide_index=True)
         
         st.subheader("🟢 Predicted BULLISH (May Go Up)")
         if not pred_bullish.empty:
-            st.dataframe(pred_bullish[['symbol', 'current_price', 'per_change', 'target', 'timeframe']], hide_index=True)
+            pred_display = pred_bullish[['symbol', 'current_price', 'per_change', 'target', 'timeframe']].copy()
+            pred_display['change_%'] = pred_display['per_change'].apply(lambda x: f"{x:+.2f}%")
+            st.dataframe(pred_display[['symbol', 'current_price', 'change_%']], hide_index=True)
         
         st.subheader("🔴 Predicted BEARISH (May Go Down)")
         if not pred_bearish.empty:
-            st.dataframe(pred_bearish[['symbol', 'current_price', 'per_change', 'target', 'timeframe']], hide_index=True)
+            pred_display = pred_bearish[['symbol', 'current_price', 'per_change', 'target', 'timeframe']].copy()
+            pred_display['change_%'] = pred_display['per_change'].apply(lambda x: f"{x:+.2f}%")
+            st.dataframe(pred_display[['symbol', 'current_price', 'change_%']], hide_index=True)
     
     with tab2:
         col1, col2 = st.columns([2, 1])

@@ -410,22 +410,34 @@ def send_telegram_msg(message, debug=False):
         chat_id = st.secrets.get("CHAT_ID", "")
         
         if not bot_token or not chat_id:
-            return {"success": False, "error": "No credentials"}
+            return {"success": False, "error": "Credentials not set"}
         
-        if "your_" in bot_token or "your_" in chat_id:
-            return {"success": False, "error": "Invalid credentials"}
+        # Skip validation if already has proper length
+        if len(bot_token) < 30:
+            return {"success": False, "error": "BOT_TOKEN too short"}
+        if len(chat_id) < 5:
+            return {"success": False, "error": "CHAT_ID too short"}
+        
+        if not chat_id.isdigit():
+            return {"success": False, "error": "CHAT_ID must be numbers only"}
         
         url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
         payload = {"chat_id": chat_id, "text": message, "parse_mode": "Markdown"}
         response = requests.post(url, json=payload, timeout=30)
         
         if debug:
-            st.write(f"TG Response: {response.status_code} - {response.text[:200]}")
+            st.write(f"TG Response: {response.status_code} - {response.text[:300]}")
         
         if response.status_code == 200:
             return {"success": True}
         else:
-            return {"success": False, "error": response.text}
+            try:
+                err = response.json().get("description", "Unknown error")
+            except:
+                err = response.text[:100]
+            if "Forbidden" in err:
+                return {"success": False, "error": "Start chat with bot on Telegram first!"}
+            return {"success": False, "error": err}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -556,32 +568,30 @@ def main():
         df = fetch_market_data()
         
         if df is not None:
-            # Generate prediction messages
             messages = create_prediction_alerts(df)
-            
-            # Show preview
             for i, msg in enumerate(messages):
                 st.code(msg[:500], language="markdown")
             
-            # Try sending
             bot_token = st.secrets.get("BOT_TOKEN", "")
             chat_id = st.secrets.get("CHAT_ID", "")
+            
+            st.write(f"Bot Token length: {len(bot_token)} | Chat ID: {chat_id}")
             
             sent = 0
             failed = 0
             
             if bot_token and chat_id and len(bot_token) > 20:
                 for msg in messages:
-                    result = send_telegram_msg(msg)
+                    result = send_telegram_msg(msg, debug=True)
                     if result.get("success"):
                         sent += 1
                     else:
+                        st.error(f"❌ {result.get('error', 'Unknown error')}")
                         failed += 1
             else:
-                st.warning(f"⚠️ Telegram not configured. Add BOT_TOKEN and CHAT_ID to secrets.")
-                st.json({"bot_configured": False, "preview_count": len(messages)})
+                st.warning("⚠️ Add BOT_TOKEN & CHAT_ID to secrets.toml")
             
-            st.success(f"✅ Sent: {sent}/{len(messages)} | Failed: {failed}")
+            st.success(f"✅ Sent: {sent} | Failed: {failed}")
             return {"sent": sent, "failed": failed, "total": len(messages)}
     
     df = fetch_market_data()
@@ -744,7 +754,7 @@ def main():
                 for sig in rec.get('signals', []):
                     st.write(f"  {'🟢' if sig[1] > 0 else '🔴'} {sig[0]}")
             
-# Tabs
+            # Tabs
             p_tab, f_tab, a_tab, n_tab = st.tabs(["⚡ Performance", "💼 Fundamentals", "🏢 About", "📰 News"])
             
             with p_tab:
@@ -846,20 +856,21 @@ def main():
                     news = fetch_stock_news(selected_stock)
                     
                     st.markdown("---")
-                    if news:
-                        for idx, item in enumerate(news):
-                            title = str(item.get("title", ""))[:60] if item.get("title") else f"News {idx+1}"
-                            content = str(item.get("content", ""))[:150] if item.get("content") else "No description"
-                            link = item.get("link", "")
+                    if news and len(news) > 0:
+                        for idx, item in enumerate(news[:5]):
+                            title = str(item.get("title", "")) if item.get("title") else "Latest Update"
+                            content = str(item.get("summary", "") or item.get("content", "") or item.get("description", ""))[:150]
+                            link = item.get("link", "") or item.get("url", "")
                             
-                            # Show as styled card without expander
-                            st.markdown(f"**{idx+1}. {title}**")
-                            st.caption(content)
-                            if link:
-                                st.markdown(f"[🔗 View Details]({link})")
-                            st.markdown("---")
+                            # Clean display
+                            st.markdown(f"**{title[:65]}**")
+                            if content and content != "None":
+                                st.caption(content)
+                            if link and "http" in link:
+                                st.markdown(f"[📖 Read More]({link})")
+                            st.markdown(":male-doctor: ---")
                     else:
-                        st.warning("No news data available")
+                        st.info("No news available for this stock")
                 else:
                     st.info("Select a stock to view news")
     

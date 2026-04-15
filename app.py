@@ -1,10 +1,63 @@
 import streamlit as st
 import requests
 import pandas as pd
-from nsepython import nse_get_index_stocks
+import yfinance as yf
 from datetime import datetime
 
 TRIGGER_PARAM = "manver_agent_8am"
+
+NIFTY50_TICKERS = [
+    "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "BHARTIARTL.NS", "ICICIBANK.NS",
+    "LTV.NS", "SBIN.NS", "HINDUNILVR.NS", "BAJFINANCE.NS", "NTPC.NS",
+    "KOTAKBANK.NS", "ITC.NS", "ONGC.NS", "LT.NS", "AXISBANK.NS",
+    "ADANIPORTS.NS", "MARUTI.NS", "TITAN.NS", "SUNPHARMA.NS", "ULTRACEMCO.NS",
+    "NESTLEIND.NS", "POWERGRID.NS", "COALINDIA.NS", "GRASIM.NS", "ASIANPAINT.NS",
+    "HDFCLIFE.NS", "DIVISLAB.NS", "ADANIENSOL.NS", "WIPRO.NS", "CIPLA.NS",
+    "TATASTEEL.NS", "DRREDDY.NS", "TECHM.NS", "SHREECEM.NS", "BPCL.NS",
+    "TATAMOTORS.NS", "BRITANNIA.NS", "EICHERMOT.NS", "ADANIGREEN.NS", "SBILIFE.NS",
+    "SRTYRE.NS", "BANKBARODA.NS", "INDUSINDBK.NS", "IDEA.NS", "GAIL.NS",
+    "NAVINFLUOR.NS", "M&M.NS", "CHOLAFIN.NS", "IOC.NS", "ABB.NS"
+]
+
+@st.cache_data(ttl=300)
+def fetch_market_data():
+    """Fetch Nifty 50 stocks data using Yahoo Finance."""
+    try:
+        tickers = yf.Tickers(NIFTY50_TICKERS)
+        
+        data = []
+        for symbol in NIFTY50_TICKERS:
+            try:
+                ticker = yf.Ticker(symbol)
+                info = ticker.info
+                
+                current_price = info.get('currentPrice') or info.get('regularMarketPreviousClose')
+                previous_close = info.get('regularMarketPreviousClose')
+                
+                if current_price and previous_close:
+                    pct_change = ((current_price - previous_close) / previous_close) * 100
+                else:
+                    pct_change = 0
+                
+                data.append({
+                    'symbol': symbol.replace('.NS', ''),
+                    'lastPrice': current_price,
+                    'previousClose': previous_close,
+                    'perChange': pct_change,
+                    'dayHigh': info.get('dayHigh'),
+                    'dayLow': info.get('dayLow'),
+                    'volume': info.get('volume'),
+                    'marketCap': info.get('marketCap')
+                })
+            except Exception:
+                continue
+        
+        df = pd.DataFrame(data)
+        df = df.dropna(subset=['lastPrice', 'perChange'])
+        return df
+    except Exception as e:
+        st.error(f"Error fetching data: {e}")
+        return None
 
 def send_telegram_msg(message):
     """Send Markdown-formatted alert to Telegram."""
@@ -26,29 +79,6 @@ def send_telegram_msg(message):
     except Exception as e:
         st.error(f"Failed to send Telegram message: {e}")
         return False
-
-@st.cache_data(ttl=300)
-def fetch_market_data():
-    """Fetch Nifty 50, 100, 200 stocks data with caching."""
-    indices = ["NIFTY 50", "NIFTY 100", "NIFTY 200"]
-    all_dfs = []
-    
-    for index_name in indices:
-        try:
-            df = nse_get_index_stocks(index_name)
-            if df is not None and not df.empty:
-                df["index"] = index_name
-                all_dfs.append(df)
-        except Exception as e:
-            st.warning(f"Could not fetch {index_name}: {e}")
-    
-    if not all_dfs:
-        return None
-    
-    combined_df = pd.concat(all_dfs, ignore_index=True)
-    combined_df = combined_df.drop_duplicates(subset=["symbol"], keep="first")
-    
-    return combined_df
 
 def analyze_market(df):
     """Analyze market and generate alerts."""
@@ -76,7 +106,7 @@ def analyze_market(df):
     
     signal = "Buy" if avg_change > 0.5 else "Sell" if avg_change < -0.5 else "Hold"
     
-    message = f"📊 *Nifty Market Analysis*\n"
+    message = f"📊 *Nifty 50 Market Analysis*\n"
     message += f"_{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}_\n\n"
     
     message += f"*Market Sentiment:* {sentiment}\n"
@@ -93,7 +123,7 @@ def analyze_market(df):
     
     if not below_1000.empty:
         message += f"\n💰 *Stocks Below ₹1000:*\n"
-        for i, row in below_1000.head(10).iterrows():
+        for idx, row in below_1000.head(10).iterrows():
             message += f"  {row['symbol']}: ₹{row['lastPrice']:.2f} ({row['perChange']:.2f}%)\n"
     
     if not gap_up_stocks.empty:

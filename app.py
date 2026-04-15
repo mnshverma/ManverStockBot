@@ -327,23 +327,40 @@ def main():
     
     df_sorted = df.sort_values(by=["per_change"], ascending=False).reset_index(drop=True)
     
-    # Sidebar
-    with st.sidebar:
-        st.header("🔍 Search Stock")
-        search = st.text_input("Search symbol/name", "").upper()
-        
-        if search:
-            results = df[df['symbol'].str.contains(search) | df['company'].str.upper().str.contains(search)]
-            if not results.empty:
-                for _, row in results.iterrows():
-                    with st.expander(f"{row['symbol']} - {row['company']}"):
+    # Search at top
+    st.subheader("🔍 Search Stock")
+    search = st.text_input("Search by symbol or name", "").upper()
+    
+    if search:
+        results = df[df['symbol'].str.contains(search, na=False) | df['company'].str.upper().str.contains(search, na=False)]
+        if not results.empty:
+            for _, row in results.iterrows():
+                with st.expander(f"{row['symbol']} - {row['company']}", expanded=True):
+                    c1, c2 = st.columns(2)
+                    with c1:
                         st.metric("Price", f"₹{row['current_price']:.2f}", delta=f"{row['per_change']:+.2f}%")
+                        st.write(f"**Change:** {row['change_amount']:+.2f}")
                         st.write(f"**Day Range:** ₹{row['day_low']:.2f} - ₹{row['day_high']:.2f}")
-                        if row['week_52_high']:
-                            st.write(f"**52W:** ₹{row['week_52_low']:.2f} - ₹{row['week_52_high']:.2f}")
-                        st.markdown(f"[📊 Groww]({row['groww_link']})")
-        
+                    with c2:
+                        st.write(f"**Open:** ₹{row['open']:.2f}")
+                        st.write(f"**Prev Close:** ₹{row['prev_close']:.2f}")
+                        st.write(f"**Volume:** {format_volume(row['volume'])}")
+                    
+                    c3, c4 = st.columns(2)
+                    with c3:
+                        st.write(f"**52W High:** ₹{row['week_52_high']:.2f}" if row['week_52_high'] else "**52W High:** N/A")
+                        st.write(f"**Market Cap:** {format_market_cap(row['market_cap'])}" if row['market_cap'] else "**Market Cap:** N/A")
+                        st.write(f"**P/E:** {row['pe_ratio']:.2f}" if row['pe_ratio'] else "**P/E:** N/A")
+                    with c4:
+                        st.write(f"**52W Low:** ₹{row['week_52_low']:.2f}" if row['week_52_low'] else "**52W Low:** N/A")
+                        st.write(f"**ROE:** {row['roe']*100:.2f}%" if row['roe'] else "**ROE:** N/A")
+                        st.write(f"**EPS:** ₹{row['eps']:.2f}" if row['eps'] else "**EPS:** N/A")
+        else:
+            st.warning("No stocks found")
         st.divider()
+    
+    # Sidebar summary only
+    with st.sidebar:
         st.subheader("📊 Summary")
         avg = df_sorted["per_change"].mean()
         st.metric("Avg Change", f"{avg:+.2f}%")
@@ -422,7 +439,6 @@ def main():
                 st.write("**NSE Symbol**", s['nse_symbol'])
                 if s['founded']:
                     st.write("**Founded**", s['founded'])
-                st.markdown(f"[📊 View on Groww]({s['groww_link']})")
     
     with tab3:
         st.subheader("🔔 Telegram Alerts")

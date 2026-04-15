@@ -218,9 +218,9 @@ def get_recommendation(s):
         signals.append(("Good ROE", 1))
         score += 1
     
-    if score >= 1:
+    if score >= 0:
         action = "🟢 BUY"
-    elif score <= -1:
+    elif score < 0:
         action = "🔴 SELL"
     else:
         action = "⚪ HOLD"

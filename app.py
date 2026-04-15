@@ -237,27 +237,22 @@ def fetch_stock_news(symbol):
     try:
         ticker = yf.Ticker(f"{symbol}.NS")
         try:
-            news = ticker.news
-            if news and len(news) > 0:
-                formatted = []
-                for n in news[:5]:
-                    formatted.append({
-                        'title': n.get('title', 'News')[:60],
-                        'summary': n.get('summary', '')[:100] if n.get('summary') else n.get('publisher', ''),
-                        'link': n.get('link', f'https://groww.in/stocks/{symbol.lower()}-ltd')
-                    })
-                if formatted:
-                    return formatted
-        except:
-            pass
-        try:
             info = ticker.info
         except:
             info = {}
         company_name = info.get('longName', info.get('shortName', symbol))
+        
         return [{
-            'title': f"{company_name} - NSE:{symbol}",
-            'summary': f"Company: {company_name} - Visit for latest news",
+            'title': f"Stock: {symbol}",
+            'summary': f"{company_name} - Track price & news",
+            'link': f"https://www.moneycontrol.com/stocks/candle-stick-history/{symbol.lower()}"
+        }, {
+            'title': f"Latest: {symbol}",
+            'summary': f"Check charts & trends",
+            'link': f"https://www.tradingview.com/?symbol={symbol}.NS"
+        }, {
+            'title': f"Analysis: {symbol}",
+            'summary': f"Technical indicators",
             'link': f"https://groww.in/stocks/{symbol.lower()}-ltd"
         }]
     except:

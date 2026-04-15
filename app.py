@@ -276,7 +276,7 @@ def create_prediction_alerts(df):
         pe = float(row.get('pe_ratio') or 0)
         roe = float(row.get('roe') or 0)
         
-        if current_price > 0:
+        if current_price > 0 and current_price < 1000:
             if "BUY" in rec['action']:
                 target = current_price * 1.2
                 stop = current_price * 0.95

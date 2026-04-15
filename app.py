@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import yfinance as yf
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import math
 
 TRIGGER_PARAM = "manver_agent_8am"
@@ -81,14 +81,22 @@ def fetch_market_data():
         for symbol in NIFTY50_TICKERS:
             try:
                 ticker = yf.Ticker(symbol)
-                hist = ticker.history(period="2d")
+                hist = ticker.history(period="2d", timeout=15)
                 if hist.empty:
                     continue
                 
+                close_price = hist['Close'].iloc[-1]
+                if pd.isna(close_price) or close_price <= 0:
+                    continue
+                
                 sym = symbol.replace('.NS', '')
-                current_price = float(hist['Close'].iloc[-1])
-                previous_close = float(hist['Close'].iloc[-2]) if len(hist) > 1 else current_price
-                pct_change = ((current_price - previous_close) / previous_close) * 100
+                current_price = float(close_price)
+                
+                if len(hist) > 1 and not pd.isna(hist['Close'].iloc[-2]):
+                    previous_close = float(hist['Close'].iloc[-2])
+                else:
+                    previous_close = current_price
+                pct_change = ((current_price - previous_close) / previous_close) * 100 if previous_close > 0 else 0
                 day_high = float(hist['High'].max())
                 day_low = float(hist['Low'].min())
                 
@@ -285,7 +293,7 @@ def create_prediction_alerts(df):
         pe = row.get('pe_ratio') or 0
         roe = row.get('roe') or 0
         
-        if current_price and current_price > 0 and not math.isnan(current_price):
+        if current_price and current_price > 0:
             if "BUY" in rec['action']:
                 target = current_price * 1.1
                 stop = current_price * 0.97
@@ -317,7 +325,7 @@ def create_prediction_alerts(df):
     bearish = pred_df[pred_df['action'] == '🔴 SELL'].sort_values('score', ascending=False)
     
     avg_change = df_sorted["per_change"].mean()
-    now = datetime.now().strftime('%d-%m-%Y %H:%M')
+    now = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime('%d-%m-%Y %H:%M')
     
     avg_change = 0 if (math.isnan(avg_change) if isinstance(avg_change, float) else False) else avg_change
     
@@ -335,15 +343,16 @@ def create_prediction_alerts(df):
             roe = s.get('roe', 0)
             signals = s.get('signals', '')
             
-            if price and price > 0 and not math.isnan(price):
+            if price and price > 0:
+                msg += f"■ {s['symbol']} ₹{int(price)} ({pct:+.1f}%)\n"
                 msg += f"  🎯 Target: ₹{int(target)} ({((target-price)/price)*100:+-.1f}%)\n"
                 msg += f"  🛡️ Stop: ₹{int(stop)} ({((stop-price)/price)*100:+.1f}%)\n"
                 msg += f"  ⏱️ 2-4 weeks"
-                if pe and not math.isnan(pe) and pe > 0:
+                if pe and pe > 0:
                     msg += f" | P/E:{pe:.1f}"
                 else:
                     msg += f" | P/E:N/A"
-                if roe and not math.isnan(roe) and roe > 0:
+                if roe and roe > 0:
                     msg += f" ROE:{roe*100:.0f}%"
                 else:
                     msg += f" ROE:N/A"
@@ -421,7 +430,7 @@ def create_market_news(df):
     else:
         weather = "NEUTRAL"
     
-    now = datetime.now().strftime('%d-%m-%Y %H:%M')
+    now = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime('%d-%m-%Y %H:%M')
     
     msg = f"\n📰 MARKET WEATHER\n"
     msg += f"Date/Time: {now}\n"
@@ -536,7 +545,7 @@ def main():
                     import time
                     time.sleep(0.3)
                     ticker = yf.Ticker(f"{custom_symbol}.NS")
-                    hist = ticker.history(period="2d", timeout=15)
+hist = ticker.history(period="5d", timeout=15)
                     
                     if hist.empty:
                         st.error("Stock not found")

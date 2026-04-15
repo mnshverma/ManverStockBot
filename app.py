@@ -312,63 +312,69 @@ def create_prediction_alerts(df):
         msg += f"Bearish\n"
         msg += f"-----------\n\n"
         for _, s in bearish.head(20).iterrows():
-            price = s.get('current_price', 0)
-            pct = s.get('per_change', 0)
-            target = s.get('target', 0)
-            stop = s.get('stop', 0)
-            pe = s.get('pe', 0)
-            roe = s.get('roe', 0)
-            signals = s.get('signals', '')
-            
-            if price and price > 0 and target > 0 and stop > 0:
-                msg += f"■ {s['symbol']} ₹{int(price)} ({pct:+.1f}%)\n"
-                msg += f"  🎯 Target: ₹{int(target)} ({((target-price)/price)*100:+-.1f}%)\n"
-                msg += f"  🛡️ Stop: ₹{int(stop)} ({((stop-price)/price)*100:+.1f}%)\n"
-                msg += f"  ⏱️ 2-4 weeks"
-                if pe and pe > 0:
-                    msg += f" | P/E:{pe:.1f}"
+            try:
+                price = float(s.get('current_price', 0) or 0)
+                pct = float(s.get('per_change', 0) or 0)
+                target = float(s.get('target', 0) or 0)
+                stop = float(s.get('stop', 0) or 0)
+                pe = float(s.get('pe', 0) or 0)
+                roe = float(s.get('roe', 0) or 0)
+                signals = s.get('signals', '')
+                
+                if price > 0 and target > 0 and stop > 0:
+                    msg += f"■ {s['symbol']} ₹{int(price)} ({pct:+.1f}%)\n"
+                    msg += f"  🎯 Target: ₹{int(target)} ({((target-price)/price)*100:+-.1f}%)\n"
+                    msg += f"  🛡️ Stop: ₹{int(stop)} ({((stop-price)/price)*100:+.1f}%)\n"
+                    msg += f"  ⏱️ 2-4 weeks"
+                    if pe > 0:
+                        msg += f" | P/E:{pe:.1f}"
+                    else:
+                        msg += f" | P/E:N/A"
+                    if roe > 0:
+                        msg += f" ROE:{roe*100:.0f}%"
+                    else:
+                        msg += f" ROE:N/A"
+                    msg += f"\n"
+                    if signals:
+                        msg += f"  📊 {signals}\n"
                 else:
-                    msg += f" | P/E:N/A"
-                if roe and roe > 0:
-                    msg += f" ROE:{roe*100:.0f}%"
-                else:
-                    msg += f" ROE:N/A"
-                msg += f"\n"
-                if signals:
-                    msg += f"  📊 {signals}\n"
-            else:
-                msg += f"■ {s['symbol']} (N/A)\n"
+                    msg += f"■ {s['symbol']} (N/A)\n"
+            except:
+                msg += f"■ {s.get('symbol', 'N/A')} (Error)\n"
     
     if not bullish.empty:
         msg += f"\nBullish\n"
         msg += f"-----------\n\n"
         for _, s in bullish.head(20).iterrows():
-            price = s.get('current_price', 0)
-            pct = s.get('per_change', 0)
-            target = s.get('target', 0)
-            stop = s.get('stop', 0)
-            pe = s.get('pe', 0)
-            roe = s.get('roe', 0)
-            signals = s.get('signals', '')
-            
-            if price and price > 0 and target > 0 and stop > 0:
-                msg += f"■ {s['symbol']} ₹{int(price)} ({pct:+.1f}%)\n"
-                msg += f"  🎯 Target: ₹{int(target)} ({((target-price)/price)*100:+-.1f}%)\n"
-                msg += f"  🛡️ Stop: ₹{int(stop)} ({((stop-price)/price)*100:+.1f}%)\n"
-                msg += f"  ⏱️ 2-4 weeks"
-                if pe and not math.isnan(pe) and pe > 0:
-                    msg += f" | P/E:{pe:.1f}"
+            try:
+                price = float(s.get('current_price', 0) or 0)
+                pct = float(s.get('per_change', 0) or 0)
+                target = float(s.get('target', 0) or 0)
+                stop = float(s.get('stop', 0) or 0)
+                pe = float(s.get('pe', 0) or 0)
+                roe = float(s.get('roe', 0) or 0)
+                signals = s.get('signals', '')
+                
+                if price > 0 and target > 0 and stop > 0:
+                    msg += f"■ {s['symbol']} ₹{int(price)} ({pct:+.1f}%)\n"
+                    msg += f"  🎯 Target: ₹{int(target)} ({((target-price)/price)*100:+-.1f}%)\n"
+                    msg += f"  🛡️ Stop: ₹{int(stop)} ({((stop-price)/price)*100:+.1f}%)\n"
+                    msg += f"  ⏱️ 2-4 weeks"
+                    if pe > 0:
+                        msg += f" | P/E:{pe:.1f}"
+                    else:
+                        msg += f" | P/E:N/A"
+                    if roe > 0:
+                        msg += f" ROE:{roe*100:.0f}%"
+                    else:
+                        msg += f" ROE:N/A"
+                    msg += f"\n"
+                    if signals:
+                        msg += f"  📊 {signals}\n"
                 else:
-                    msg += f" | P/E:N/A"
-                if roe and not math.isnan(roe) and roe > 0:
-                    msg += f" ROE:{roe*100:.0f}%"
-                else:
-                    msg += f" ROE:N/A"
-                msg += f"\n"
-                if signals:
-                    msg += f"  📊 {signals}\n"
-            else:
-                msg += f"■ {s['symbol']} (N/A)\n"
+                    msg += f"■ {s['symbol']} (N/A)\n"
+            except:
+                msg += f"■ {s.get('symbol', 'N/A')} (Error)\n"
     
     return [msg]
 

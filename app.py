@@ -3,6 +3,7 @@ import requests
 import pandas as pd
 import yfinance as yf
 from datetime import datetime
+import json
 
 TRIGGER_PARAM = "manver_agent_8am"
 
@@ -78,13 +79,22 @@ def fetch_market_data():
         st.error(f"Error fetching data: {e}")
         return None
 
-def send_telegram_msg(message):
+def send_telegram_msg(message, debug=False):
     """Send Markdown-formatted alert to Telegram."""
     try:
         bot_token = st.secrets.get("BOT_TOKEN")
         chat_id = st.secrets.get("CHAT_ID")
+        
+        if debug:
+            st.write(f"Debug - BOT_TOKEN: {bot_token[:10]}... if exists")
+            st.write(f"Debug - CHAT_ID: {chat_id}")
+        
         if not bot_token or not chat_id:
             st.error("Telegram credentials not configured in secrets.toml")
+            return False
+        
+        if bot_token == "your_bot_token_here" or chat_id == "your_chat_id_here":
+            st.error("Please update secrets.toml with actual Telegram credentials")
             return False
         
         url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
@@ -94,7 +104,16 @@ def send_telegram_msg(message):
             "parse_mode": "Markdown"
         }
         response = requests.post(url, json=payload, timeout=30)
-        return response.status_code == 200
+        
+        if debug:
+            st.write(f"Debug - Response status: {response.status_code}")
+            st.write(f"Debug - Response body: {response.text[:500]}")
+        
+        if response.status_code != 200:
+            st.error(f"Telegram API error: {response.status_code} - {response.text}")
+            return False
+            
+        return True
     except Exception as e:
         st.error(f"Failed to send Telegram message: {e}")
         return False
@@ -209,10 +228,11 @@ def main():
         st.dataframe(below_1000, use_container_width=True, hide_index=True)
         
         st.subheader("🔔 Manual Trigger")
+        send_debug = st.checkbox("Show debug info", value=False)
         if st.button("Send Test Alert to Telegram"):
             message = analyze_market(df)
             if message:
-                success = send_telegram_msg(message)
+                success = send_telegram_msg(message, debug=send_debug)
                 if success:
                     st.success("✅ Test alert sent successfully!")
                 else:

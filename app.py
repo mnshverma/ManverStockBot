@@ -4,6 +4,12 @@ import pandas as pd
 import yfinance as yf
 from datetime import datetime
 
+try:
+    from newsapi import NewsApiClient
+    NEWSAPI_AVAILABLE = True
+except ImportError:
+    NEWSAPI_AVAILABLE = False
+
 TRIGGER_PARAM = "manver_agent_8am"
 
 NIFTY50_TICKERS = [
@@ -223,6 +229,126 @@ def format_volume(value):
         return f"{value/1e3:.2f} K"
     return str(value)
 
+def get_recommendation(s):
+    """Generate buy/sell/hold recommendation based on technical and fundamental analysis."""
+    signals = []
+    score = 0
+    
+    # Price vs 52W analysis
+    if s['current_price'] and s['week_52_low'] and s['week_52_high']:
+        price_range = s['week_52_high'] - s['week_52_low']
+        if price_range > 0:
+            price_position = (s['current_price'] - s['week_52_low']) / price_range
+            if price_position < 0.25:
+                signals.append((" Oversold - Potential Buy ", 2))
+                score += 2
+            elif price_position > 0.85:
+                signals.append((" Overbought - Wait ", -1))
+                score -= 1
+    
+    # Daily change analysis
+    if s['per_change']:
+        if s['per_change'] > 3:
+            signals.append((" Strong Momentum ", 1))
+            score += 1
+        elif s['per_change'] > 1.5:
+            signals.append((" Gap Up ", 1))
+            score += 1
+        elif s['per_change'] < -3:
+            signals.append((" Heavy Sell ", -1))
+            score -= 1
+        elif s['per_change'] < -1.5:
+            signals.append((" Gap Down - Potential Bottom ", 1))
+            score += 1
+    
+    # Volume analysis
+    if s.get('volume') and s.get('avg_volume'):
+        if s['volume'] > s['avg_volume'] * 2:
+            signals.append((" High Volume ", 1 if s['per_change'] > 0 else -1))
+            score += 1 if s['per_change'] > 0 else -1
+    
+    # Fundamental checks
+    if s.get('pe_ratio'):
+        if 10 < s['pe_ratio'] < 25:
+            signals.append((" Reasonable PE ", 1))
+            score += 1
+        elif s['pe_ratio'] > 40:
+            signals.append((" High PE - Risky ", -1))
+            score -= 1
+        elif s['pe_ratio'] < 0:
+            signals.append((" Negative Earnings ", -1))
+            score -= 1
+    
+    if s.get('roe') and s['roe'] > 0.15:
+        signals.append((" Good ROE ", 1))
+        score += 1
+    
+    # Moving average check
+    if s.get('fifty_day_avg') and s.get('two_hundred_day_avg'):
+        if s['current_price'] > s['fifty_day_avg'] > s['two_hundred_day_avg']:
+            signals.append((" Above MA - Bullish ", 2))
+            score += 2
+        elif s['current_price'] < s['fifty_day_avg'] < s['two_hundred_day_avg']:
+            signals.append((" Below MA - Bearish ", -2))
+            score -= 2
+    
+    if score >= 3:
+        action = "🟢 BUY"
+        target = s['current_price'] * 1.10
+        stop = s['current_price'] * 0.97
+        timeframe = "1-4 weeks"
+    elif score <= -2:
+        action = "🔴 SELL"
+        target = s['current_price'] * 0.95
+        stop = s['current_price'] * 1.03
+        timeframe = "1-2 weeks"
+    else:
+        action = "⚪ HOLD"
+        target = s['current_price'] * 1.03
+        stop = s['current_price'] * 0.98
+        timeframe = "2-4 weeks"
+    
+    return {
+        "action": action,
+        "target": target,
+        "stop_loss": stop,
+        "timeframe": timeframe,
+        "score": score,
+        "signals": signals,
+        "reasoning": "; ".join([s[0] for s in signals]) if signals else "No clear signals"
+    }
+
+@st.cache_data(ttl=1800)
+def fetch_stock_news(symbol):
+    """Fetch news for a stock using Yahoo Finance."""
+    try:
+        ticker = yf.Ticker(f"{symbol}.NS")
+        news = ticker.news
+        return news if news else []
+    except:
+        return []
+
+@st.cache_data(ttl=1800)
+def fetch_market_news():
+    """Fetch general market news."""
+    try:
+        url = "https://newsdata.io/api/1/news"
+        api_key = st.secrets.get("NEWSDATA_IO_KEY")
+        if api_key:
+            params = {
+                "apikey": api_key,
+                "q": "NSE India OR stock market OR sensex OR nifty",
+                "language": "en",
+                "category": "business"
+            }
+            response = requests.get(url, params=params, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                return data.get("results", [])[:5]
+        return []
+    except:
+        return []
+
 def send_telegram_msg(message, debug=False):
     """Send Markdown-formatted alert to Telegram."""
     try:
@@ -295,13 +421,12 @@ def create_telegram_alerts(df):
 
 def main():
     st.set_page_config(
-        page_title="Nifty 50 Monitor",
+        page_title="ManverInsight",
         page_icon="📈",
-        layout="wide",
-        initial_sidebar_state="expanded"
+        layout="wide"
     )
     
-    st.title("📈 Nifty 50 Stock Monitor")
+    st.title("📈 ManverInsight")
     
     # Check for trigger mode
     query_params = st.query_params
@@ -359,16 +484,18 @@ def main():
             st.warning("No stocks found")
         st.divider()
     
-    # Sidebar summary only
-    with st.sidebar:
-        st.subheader("📊 Summary")
-        avg = df_sorted["per_change"].mean()
-        st.metric("Avg Change", f"{avg:+.2f}%")
-        
-        gainers = len(df_sorted[df_sorted['per_change'] > 0])
-        losers = len(df_sorted[df_sorted['per_change'] < 0])
-        st.write(f"🟢 Gainers: {gainers}")
-        st.write(f"🔴 Losers: {losers}")
+    # Summary at top
+    avg = df_sorted["per_change"].mean()
+    gainers = len(df_sorted[df_sorted['per_change'] > 0])
+    losers = len(df_sorted[df_sorted['per_change'] < 0])
+    
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Avg Change", f"{avg:+.2f}%")
+    c2.metric("Gainers", gainers)
+    c3.metric("Losers", losers)
+    c4.metric("Total", len(df_sorted))
+    
+    st.divider()
     
     # Main UI
     tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "📈 Stock Detail", "🔔 Alerts"])
@@ -401,11 +528,29 @@ def main():
         if selected:
             s = df_sorted[df_sorted['symbol'] == selected].iloc[0]
             
-            # Price Header (Groww style)
+            # Price Header
             st.metric("Price", f"₹{s['current_price']:.2f}", delta=f"{s['change_amount']:+.2f} ({s['per_change']:+.2f}%)")
             
-            # Tabs like Groww
-            p_tab, f_tab, a_tab = st.tabs(["Performance", "Fundamentals", "About"])
+            # Get recommendation
+            rec = get_recommendation(s)
+            
+            # Recommendation box
+            rec_col1, rec_col2, rec_col3, rec_col4 = st.columns(4)
+            rec_col1.write("**Recommendation**")
+            rec_col1.subheader(rec['action'])
+            rec_col2.write("**Target**")
+            rec_col2.write(f"₹{rec['target']:.2f}")
+            rec_col3.write("**Stop Loss**")
+            rec_col3.write(f"₹{rec['stop_loss']:.2f}")
+            rec_col4.write("**Timeframe**")
+            rec_col4.write(rec['timeframe'])
+            
+            with st.expander("📋 Analysis Details"):
+                st.write(f"**Score:** {rec['score']}")
+                st.write(f"**Reasoning:** {rec['reasoning']}")
+            
+            # Tabs
+            p_tab, f_tab, a_tab, n_tab = st.tabs(["Performance", "Fundamentals", "About", "📰 News"])
             
             with p_tab:
                 c1, c2 = st.columns(2)
@@ -437,8 +582,19 @@ def main():
                 st.write("**Company**", s['company'])
                 st.write("**Industry**", s['industry'])
                 st.write("**NSE Symbol**", s['nse_symbol'])
-                if s['founded']:
+                if s.get('founded'):
                     st.write("**Founded**", s['founded'])
+            
+            with n_tab:
+                news = fetch_stock_news(selected)
+                if news:
+                    for item in news[:5]:
+                        with st.expander(item.get("title", "No title")[:80]):
+                            st.write(item.get("content", ""))
+                            if item.get("link"):
+                                st.markdown(f"[Read more]({item['link']})")
+                else:
+                    st.info("No recent news available")
     
     with tab3:
         st.subheader("🔔 Telegram Alerts")

@@ -4,7 +4,6 @@ import pandas as pd
 import yfinance as yf
 from datetime import datetime
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 
 TRIGGER_PARAM = "manver_agent_8am"
 
@@ -21,93 +20,109 @@ NIFTY50_TICKERS = [
     "TATASTEEL.NS", "TECHM.NS", "TITAN.NS", "ULTRACEMCO.NS", "WIPRO.NS"
 ]
 
+def get_clean_price(df, col='Close'):
+    """Extremely robust helper to get the latest scalar float price."""
+    try:
+        data = df[col]
+        # If it's a DataFrame (MultiIndex), take the first column
+        if isinstance(data, pd.DataFrame):
+            data = data.iloc[:, 0]
+        # Get last valid value
+        val = data.dropna().iloc[-1]
+        # If still a series/array, grab the first element
+        if hasattr(val, '__iter__') and not isinstance(val, (str, bytes)):
+            val = val[0]
+        return float(val)
+    except:
+        return None
+
 @st.cache_data(ttl=1800)
 def get_snapshot():
     try:
-        # Use a flat download for dashboard to avoid MultiIndex issues
-        df_batch = yf.download(NIFTY50_TICKERS, period="2d", progress=False)
+        df_batch = yf.download(NIFTY50_TICKERS, period="5d", progress=False)
         data = []
         for s in NIFTY50_TICKERS:
             try:
-                # Handle MultiIndex if present
-                if isinstance(df_batch.columns, pd.MultiIndex):
-                    # MultiIndex columns are (Metric, Ticker)
-                    cp = df_batch['Close'][s].iloc[-1]
-                    pp = df_batch['Close'][s].iloc[-2]
-                else:
-                    continue # Should be MultiIndex for batch
-                data.append({'Symbol': s.replace('.NS',''), 'Price': round(float(cp),2), 'Change': round(((cp-pp)/pp)*100, 2)})
+                # Handle MultiIndex safely
+                close_s = df_batch['Close'][s] if s in df_batch['Close'] else None
+                if close_s is not None:
+                    cp = float(close_s.dropna().iloc[-1])
+                    pp = float(close_s.dropna().iloc[-2])
+                    data.append({'Symbol': s.replace('.NS',''), 'Price': round(cp,2), 'Change': round(((cp-pp)/pp)*100, 2)})
             except: continue
         return pd.DataFrame(data)
     except: return pd.DataFrame()
 
-def apply_ui():
-    st.markdown("""
-        <style>
-        .stApp { background: #0f172a; color: white; font-family: 'Inter', sans-serif; }
-        .p-card { background: #1e293b; border-radius: 15px; padding: 25px; border-left: 5px solid #3b82f6; margin-bottom: 20px; }
-        .h-title { font-weight: 800; font-size: 3rem; text-align: center; color: #60a5fa; margin-bottom: 20px; }
-        </style>
-    """, unsafe_allow_html=True)
-
 def main():
     st.set_page_config(page_title="Manver Insights", layout="wide")
-    apply_ui()
-    st.markdown('<h1 class="h-title">Manver Insights</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 style="text-align:center; color:#60a5fa; font-weight:800; font-size:3.5rem;">Manver Insights</h1>', unsafe_allow_html=True)
 
-    if 'last_search' not in st.session_state: st.session_state.last_search = ""
     if 'search_data' not in st.session_state: st.session_state.search_data = None
+    if 'last_q' not in st.session_state: st.session_state.last_q = ""
 
-    q = st.text_input("🔍 Predictive Search", placeholder="e.g. TCS, NCC, ZOMATO").upper().strip()
+    q = st.text_input("🔍 Global Predictive Search", placeholder="ZOMATO, TCS, NCC...").upper().strip()
     
-    if q and q != st.session_state.last_search:
-        st.session_state.search_data = None
-        st.session_state.last_search = q
+    if q and q != st.session_state.last_q:
+        st.session_state.last_q = q
         found = False
-        # Use Ticker.history for search - more stable for single stock objects
-        for s_ticker in [f"{q}.NS", q, f"{q}.BO"]:
+        for sym in [f"{q}.NS", q, f"{q}.BO"]:
             try:
-                t = yf.Ticker(s_ticker)
-                df = t.history(period="1y")
+                # Use download for search too, it handles single lookups well
+                df = yf.download(sym, period="1y", progress=False)
                 if not df.empty and len(df) > 1:
-                    st.session_state.search_data = {'df': df, 'ticker': s_ticker}
+                    st.session_state.search_data = {'df': df, 'symbol': sym}
                     found = True
                     break
             except: continue
-        if not found: st.warning("Ticker not found.")
+        if not found: st.warning("Ticker not discovered.")
 
     if st.session_state.search_data:
         sd = st.session_state.search_data
         df = sd['df']
-        # Convert to float safely
-        p = float(df['Close'].iloc[-1])
-        pp = float(df['Close'].iloc[-2])
-        chg = ((p-pp)/pp)*100
         
-        # Simple Prediction Logic
-        delta = df['Close'].diff()
-        gn, ls = (delta.where(delta > 0, 0)).rolling(14).mean(), (-delta.where(delta < 0, 0)).rolling(14).mean()
-        rsi = 100 - (100 / (1 + (gn/ls).iloc[-1])) if not (gn/ls).empty else 50
-        pred = "🚀 STRONG BUY" if rsi < 35 else "📈 BUY" if rsi < 50 else "📉 SELL" if rsi > 70 else "⚪ HOLD"
+        # Use our super-clean pricing helper
+        p = get_clean_price(df, 'Close')
+        o = get_clean_price(df, 'Open')
         
-        st.markdown(f"""
-        <div class="p-card">
-            <h3>{sd['ticker']}</h3>
-            <h1 style="color:{'#4ade80' if 'BUY' in pred else '#f87171' if 'SELL' in pred else 'white'};">{pred}</h1>
-            <h2>₹{p:,.2f} <span style="color:{'#4ade80' if chg > 0 else '#f87171'};">{chg:+.2f}%</span></h2>
-            <p>RSI: {rsi:.1f}</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        fig = go.Figure(go.Candlestick(x=df.index[-120:], open=df['Open'][-120:], high=df['High'][-120:], low=df['Low'][-120:], close=df['Close'][-120:]))
-        fig.update_layout(template="plotly_dark", height=450, xaxis_rangeslider_visible=False, margin=dict(l=0,r=0,t=0,b=0))
-        st.plotly_chart(fig, use_container_width=True)
+        if p is not None:
+            # We need the previous close too
+            try:
+                # Ensure we handle the potentially multi-index series
+                c_series = df['Close']
+                if isinstance(c_series, pd.DataFrame): c_series = c_series.iloc[:, 0]
+                pp = float(c_series.dropna().iloc[-2])
+                chg = ((p-pp)/pp)*100
+            except:
+                chg = 0
+            
+            # Predict Logic
+            rsi = 50
+            try:
+                diff = c_series.diff()
+                g = diff.where(diff > 0, 0).rolling(14).mean()
+                l = (-diff.where(diff < 0, 0)).rolling(14).mean()
+                rsi = 100 - (100 / (1 + (g/l).iloc[-1]))
+            except: pass
+            
+            pred = "🚀 STRONG BUY" if rsi < 35 else "📈 BUY" if rsi < 50 else "📉 SELL" if rsi > 70 else "⚪ HOLD"
+            
+            st.markdown(f"""
+            <div style="background:#1e293b; padding:30px; border-radius:15px; border-left:8px solid #3b82f6;">
+                <h3 style="margin:0;">{sd['symbol']}</h3>
+                <h1 style="color:{'#4ade80' if 'BUY' in pred else '#f87171' if 'SELL' in pred else 'white'}; margin:15px 0;">{pred}</h1>
+                <h2 style="margin:0;">₹{p:,.2f} <span style="font-size:1.2rem; color:{'#4ade80' if chg > 0 else '#f87171'};">{chg:+.2f}%</span></h2>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            fig = go.Figure(go.Candlestick(x=df.index[-120:], open=df['Open'].iloc[-120:].values.flatten(), high=df['High'].iloc[-120:].values.flatten(), low=df['Low'].iloc[-120:].values.flatten(), close=df['Close'].iloc[-120:].values.flatten()))
+            fig.update_layout(template="plotly_dark", height=450, xaxis_rangeslider_visible=False)
+            st.plotly_chart(fig, use_container_width=True)
 
     st.divider()
-    st.subheader("📊 Market Snapshot")
+    st.subheader("📊 Indian Market snapshot")
     snap = get_snapshot()
     if not snap.empty:
-        st.dataframe(snap.sort_values('Change', ascending=False).head(10), hide_index=True, use_container_width=True)
+        st.dataframe(snap.sort_values('Change', ascending=False), hide_index=True, use_container_width=True)
 
 if __name__ == "__main__":
     main()

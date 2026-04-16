@@ -4,73 +4,75 @@ import pandas as pd
 import yfinance as yf
 from datetime import datetime, timezone, timedelta
 import math
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 TRIGGER_PARAM = "manver_agent_8am"
 
 NIFTY50_TICKERS = [
-    "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "BHARTIARTL.NS", "ICICIBANK.NS",
-    "LTV.NS", "SBIN.NS", "HINDUNILVR.NS", "BAJFINANCE.NS", "NTPC.NS",
-    "KOTAKBANK.NS", "ITC.NS", "ONGC.NS", "LT.NS", "AXISBANK.NS",
-    "ADANIPORTS.NS", "MARUTI.NS", "TITAN.NS", "SUNPHARMA.NS", "ULTRACEMCO.NS",
-    "NESTLEIND.NS", "POWERGRID.NS", "COALINDIA.NS", "GRASIM.NS", "ASIANPAINT.NS",
-    "HDFCLIFE.NS", "DIVISLAB.NS", "ADANIENSOL.NS", "WIPRO.NS", "CIPLA.NS",
-    "TATASTEEL.NS", "DRREDDY.NS", "TECHM.NS", "SHREECEM.NS", "BPCL.NS",
-    "TATAMOTORS.NS", "BRITANNIA.NS", "EICHERMOT.NS", "ADANIGREEN.NS", "SBILIFE.NS",
-    "APOLLOTYRE.NS", "BANKBARODA.NS", "INDUSINDBK.NS", "IDEA.NS", "GAIL.NS",
-    "NAVINFLUOR.NS", "M&M.NS", "CHOLAFIN.NS", "IOC.NS", "ABB.NS"
+    "ADANIENT.NS", "ADANIPORTS.NS", "APOLLOHOSP.NS", "ASIANPAINT.NS", "AXISBANK.NS",
+    "BAJAJ-AUTO.NS", "BAJFINANCE.NS", "BAJAJFINSV.NS", "BPCL.NS", "BHARTIARTL.NS",
+    "BRITANNIA.NS", "CIPLA.NS", "COALINDIA.NS", "DIVISLAB.NS", "DRREDDY.NS",
+    "EICHERMOT.NS", "GRASIM.NS", "HCLTECH.NS", "HDFCBANK.NS", "HDFCLIFE.NS",
+    "HEROMOTOCO.NS", "HINDALCO.NS", "HINDUNILVR.NS", "ICICIBANK.NS", "INDUSINDBK.NS",
+    "INFY.NS", "ITC.NS", "JSWSTEEL.NS", "KOTAKBANK.NS", "LT.NS",
+    "LTIM.NS", "M&M.NS", "MARUTI.NS", "NESTLEIND.NS", "NTPC.NS",
+    "ONGC.NS", "POWERGRID.NS", "RELIANCE.NS", "SBILIFE.NS", "SHRIRAMFIN.NS",
+    "SBIN.NS", "SUNPHARMA.NS", "TCS.NS", "TATACONSUM.NS", "TATAMOTORS.NS",
+    "TATASTEEL.NS", "TECHM.NS", "TITAN.NS", "ULTRACEMCO.NS", "WIPRO.NS"
 ]
 
 COMPANY_INFO = {
-    "RELIANCE": {"company": "Reliance Industries Ltd", "industry": "Conglomerate", "founded": 1960},
-    "TCS": {"company": "Tata Consultancy Services Ltd", "industry": "IT Services", "founded": 1968},
-    "HDFCBANK": {"company": "HDFC Bank Ltd", "industry": "Banks", "founded": 1994},
-    "BHARTIARTL": {"company": "Bharti Airtel Ltd", "industry": "Telecom", "founded": 1995},
-    "ICICIBANK": {"company": "ICICI Bank Ltd", "industry": "Banks", "founded": 1994},
-    "LTV": {"company": "Larsen & Toubro Ltd", "industry": "Construction", "founded": 1946},
-    "SBIN": {"company": "State Bank of India", "industry": "Banks", "founded": 1806},
-    "HINDUNILVR": {"company": "Hindustan Unilever Ltd", "industry": "FMCG", "founded": 1933},
-    "BAJFINANCE": {"company": "Bajaj Finance Ltd", "industry": "NBFC", "founded": 1992},
-    "NTPC": {"company": "NTPC Ltd", "industry": "Power", "founded": 1975},
-    "KOTAKBANK": {"company": "Kotak Mahindra Bank Ltd", "industry": "Banks", "founded": 1985},
-    "ITC": {"company": "ITC Ltd", "industry": "FMCG", "founded": 1910},
-    "ONGC": {"company": "Oil & Natural Gas Corporation Ltd", "industry": "Oil & Gas", "founded": 1956},
-    "LT": {"company": "Larsen & Toubro Ltd", "industry": "Construction", "founded": 1946},
-    "AXISBANK": {"company": "Axis Bank Ltd", "industry": "Banks", "founded": 1993},
-    "ADANIPORTS": {"company": "Adani Ports and SEZ Ltd", "industry": "Services", "founded": 1997},
-    "MARUTI": {"company": "Maruti Suzuki India Ltd", "industry": "Automobile", "founded": 1981},
-    "TITAN": {"company": "Titan Company Ltd", "industry": "Jewellery", "founded": 1984},
-    "SUNPHARMA": {"company": "Sun Pharmaceutical Industries Ltd", "industry": "Pharma", "founded": 1983},
-    "ULTRACEMCO": {"company": "UltraTech Cement Ltd", "industry": "Cement", "founded": 2000},
-    "NESTLEIND": {"company": "Nestle India Ltd", "industry": "FMCG", "founded": 1866},
-    "POWERGRID": {"company": "Power Grid Corporation of India Ltd", "industry": "Power", "founded": 1989},
-    "COALINDIA": {"company": "Coal India Ltd", "industry": "Mining", "founded": 1973},
-    "GRASIM": {"company": "Grasim Industries Ltd", "industry": "Cement", "founded": 1947},
+    "ADANIENT": {"company": "Adani Enterprises Ltd", "industry": "Conglomerate", "founded": 1988},
+    "ADANIPORTS": {"company": "Adani Ports and SEZ Ltd", "industry": "Services", "founded": 1998},
+    "APOLLOHOSP": {"company": "Apollo Hospitals Enterprise Ltd", "industry": "Healthcare", "founded": 1983},
     "ASIANPAINT": {"company": "Asian Paints Ltd", "industry": "Chemicals", "founded": 1942},
-    "HDFCLIFE": {"company": "HDFC Life Insurance Company Ltd", "industry": "Insurance", "founded": 2000},
-    "DIVISLAB": {"company": "Divi's Laboratories Ltd", "industry": "Pharma", "founded": 1990},
-    "ADANIENSOL": {"company": "Adani Energy Solutions Ltd", "industry": "Power", "founded": 2006},
-    "WIPRO": {"company": "Wipro Ltd", "industry": "IT Services", "founded": 1945},
-    "CIPLA": {"company": "Cipla Ltd", "industry": "Pharma", "founded": 1935},
-    "TATASTEEL": {"company": "Tata Steel Ltd", "industry": "Metal & Mining", "founded": 1907},
-    "DRREDDY": {"company": "Dr. Reddy's Laboratories Ltd", "industry": "Pharma", "founded": 1984},
-    "TECHM": {"company": "Tech Mahindra Ltd", "industry": "IT Services", "founded": 1986},
-    "SHREECEM": {"company": "Shree Cement Ltd", "industry": "Cement", "founded": 1970},
+    "AXISBANK": {"company": "Axis Bank Ltd", "industry": "Banks", "founded": 1993},
+    "BAJAJ-AUTO": {"company": "Bajaj Auto Ltd", "industry": "Automobile", "founded": 1945},
+    "BAJFINANCE": {"company": "Bajaj Finance Ltd", "industry": "NBFC", "founded": 1987},
+    "BAJAJFINSV": {"company": "Bajaj Finserv Ltd", "industry": "NBFC", "founded": 2007},
     "BPCL": {"company": "Bharat Petroleum Corporation Ltd", "industry": "Oil & Gas", "founded": 1952},
-    "TATAMOTORS": {"company": "Tata Motors Ltd", "industry": "Automobile", "founded": 1945},
+    "BHARTIARTL": {"company": "Bharti Airtel Ltd", "industry": "Telecom", "founded": 1995},
     "BRITANNIA": {"company": "Britannia Industries Ltd", "industry": "FMCG", "founded": 1892},
+    "CIPLA": {"company": "Cipla Ltd", "industry": "Pharma", "founded": 1935},
+    "COALINDIA": {"company": "Coal India Ltd", "industry": "Mining", "founded": 1975},
+    "DIVISLAB": {"company": "Divi's Laboratories Ltd", "industry": "Pharma", "founded": 1990},
+    "DRREDDY": {"company": "Dr. Reddy's Laboratories Ltd", "industry": "Pharma", "founded": 1984},
     "EICHERMOT": {"company": "Eicher Motors Ltd", "industry": "Automobile", "founded": 1948},
-    "ADANIGREEN": {"company": "Adani Green Energy Ltd", "industry": "Power", "founded": 2015},
-    "SBILIFE": {"company": "SBI Life Insurance Company Ltd", "industry": "Insurance", "founded": 2001},
-    "APOLLOTYRE": {"company": "Apollo Tyres Ltd", "industry": "Automobile", "founded": 1959},
-    "BANKBARODA": {"company": "Bank of Baroda", "industry": "Banks", "founded": 1908},
+    "GRASIM": {"company": "Grasim Industries Ltd", "industry": "Cement", "founded": 1947},
+    "HCLTECH": {"company": "HCL Technologies Ltd", "industry": "IT Services", "founded": 1991},
+    "HDFCBANK": {"company": "HDFC Bank Ltd", "industry": "Banks", "founded": 1994},
+    "HDFCLIFE": {"company": "HDFC Life Insurance Ltd", "industry": "Insurance", "founded": 2000},
+    "HEROMOTOCO": {"company": "Hero MotoCorp Ltd", "industry": "Automobile", "founded": 1984},
+    "HINDALCO": {"company": "Hindalco Industries Ltd", "industry": "Metals", "founded": 1958},
+    "HINDUNILVR": {"company": "Hindustan Unilever Ltd", "industry": "FMCG", "founded": 1933},
+    "ICICIBANK": {"company": "ICICI Bank Ltd", "industry": "Banks", "founded": 1994},
     "INDUSINDBK": {"company": "IndusInd Bank Ltd", "industry": "Banks", "founded": 1994},
-    "IDEA": {"company": "Vodafone Idea Ltd", "industry": "Telecom", "founded": 1995},
-    "GAIL": {"company": "GAIL India Ltd", "industry": "Oil & Gas", "founded": 1984},
-    "NAVINFLUOR": {"company": "Navin Fluorine International Ltd", "industry": "Chemicals", "founded": 1983},
+    "INFY": {"company": "Infosys Ltd", "industry": "IT Services", "founded": 1981},
+    "ITC": {"company": "ITC Ltd", "industry": "FMCG", "founded": 1910},
+    "JSWSTEEL": {"company": "JSW Steel Ltd", "industry": "Metals", "founded": 1982},
+    "KOTAKBANK": {"company": "Kotak Mahindra Bank Ltd", "industry": "Banks", "founded": 1985},
+    "LT": {"company": "Larsen & Toubro Ltd", "industry": "Construction", "founded": 1938},
+    "LTIM": {"company": "LTIMindtree Ltd", "industry": "IT Services", "founded": 1996},
     "M&M": {"company": "Mahindra & Mahindra Ltd", "industry": "Automobile", "founded": 1945},
-    "CHOLAFIN": {"company": "Cholamandalam Investment and Finance Ltd", "industry": "NBFC", "founded": 1978},
-    "IOC": {"company": "Indian Oil Corporation Ltd", "industry": "Oil & Gas", "founded": 1964},
-    "ABB": {"company": "ABB India Ltd", "industry": "Capital Goods", "founded": 1949}
+    "MARUTI": {"company": "Maruti Suzuki India Ltd", "industry": "Automobile", "founded": 1981},
+    "NESTLEIND": {"company": "Nestle India Ltd", "industry": "FMCG", "founded": 1959},
+    "NTPC": {"company": "NTPC Ltd", "industry": "Power", "founded": 1975},
+    "ONGC": {"company": "Oil & Natural Gas Corporation Ltd", "industry": "Oil & Gas", "founded": 1956},
+    "POWERGRID": {"company": "Power Grid Corporation of India Ltd", "industry": "Power", "founded": 1989},
+    "RELIANCE": {"company": "Reliance Industries Ltd", "industry": "Conglomerate", "founded": 1958},
+    "SBILIFE": {"company": "SBI Life Insurance Company Ltd", "industry": "Insurance", "founded": 2001},
+    "SHRIRAMFIN": {"company": "Shriram Finance Ltd", "industry": "NBFC", "founded": 1979},
+    "SBIN": {"company": "State Bank of India", "industry": "Banks", "founded": 1806},
+    "SUNPHARMA": {"company": "Sun Pharmaceutical Industries Ltd", "industry": "Pharma", "founded": 1983},
+    "TCS": {"company": "Tata Consultancy Services Ltd", "industry": "IT Services", "founded": 1968},
+    "TATACONSUM": {"company": "Tata Consumer Products Ltd", "industry": "FMCG", "founded": 1962},
+    "TATAMOTORS": {"company": "Tata Motors Ltd", "industry": "Automobile", "founded": 1945},
+    "TATASTEEL": {"company": "Tata Steel Ltd", "industry": "Metals", "founded": 1907},
+    "TECHM": {"company": "Tech Mahindra Ltd", "industry": "IT Services", "founded": 1986},
+    "TITAN": {"company": "Titan Company Ltd", "industry": "Jewellery", "founded": 1984},
+    "ULTRACEMCO": {"company": "UltraTech Cement Ltd", "industry": "Cement", "founded": 1983},
+    "WIPRO": {"company": "Wipro Ltd", "industry": "IT Services", "founded": 1945}
 }
 
 @st.cache_data(ttl=300)
@@ -81,24 +83,30 @@ def fetch_market_data():
         for symbol in NIFTY50_TICKERS:
             try:
                 ticker = yf.Ticker(symbol)
-                hist = ticker.history(period="5d", timeout=15)
-                if hist.empty:
+                hist = ticker.history(period="1mo", timeout=15)
+                if hist.empty or len(hist) < 2:
                     continue
                 
                 close_vals = hist['Close'].dropna()
                 if close_vals.empty:
                     continue
                 
+                # Calculate RSI (14-day)
+                rsi = None
+                if len(close_vals) >= 15:
+                    delta = close_vals.diff()
+                    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+                    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+                    rs = gain / loss
+                    rsi_series = 100 - (100 / (1 + rs))
+                    rsi = float(rsi_series.iloc[-1])
+
                 sym = symbol.replace('.NS', '')
                 current_price = float(close_vals.iloc[-1])
-                
-                if len(close_vals) > 1:
-                    previous_close = float(close_vals.iloc[-2])
-                else:
-                    previous_close = current_price
+                previous_close = float(close_vals.iloc[-2])
                 pct_change = ((current_price - previous_close) / previous_close) * 100 if previous_close > 0 else 0
-                day_high = float(hist['High'].max())
-                day_low = float(hist['Low'].min())
+                day_high = float(hist['High'].iloc[-5:].max()) # Last 5 days high
+                day_low = float(hist['Low'].iloc[-5:].min())  # Last 5 days low
                 
                 try:
                     info = ticker.info
@@ -131,8 +139,8 @@ def fetch_market_data():
                     'change_amount': current_price - previous_close,
                     'open': float(hist['Open'].iloc[-1]),
                     'prev_close': previous_close,
-                    'todays_high': day_high,
-                    'todays_low': day_low,
+                    'todays_high': float(hist['High'].iloc[-1]),
+                    'todays_low': float(hist['Low'].iloc[-1]),
                     'week_52_high': fifty_two_week_high,
                     'week_52_low': fifty_two_week_low,
                     'volume': volume,
@@ -145,7 +153,8 @@ def fetch_market_data():
                     'roe': roe,
                     'eps': eps,
                     'beta': beta,
-                    'sector': sector
+                    'sector': sector,
+                    'rsi': rsi
                 })
             except:
                 continue
@@ -200,13 +209,35 @@ def get_recommendation(s):
                 signals.append(("Near 52W High", -1))
                 score -= 1
     
-    if s.get('fifty_day_avg') and s.get('two_hundred_day_avg'):
+    if s.get('fifty_day_avg') and s.get('two_hundred_day_avg') and s.get('current_price'):
         if s['current_price'] > s['fifty_day_avg']:
             signals.append(("Above 50 DMA", 1))
             score += 1
         if s['fifty_day_avg'] > s['two_hundred_day_avg']:
             signals.append(("Golden Cross", 2))
             score += 2
+    
+    rsi = s.get('rsi')
+    if rsi:
+        if rsi < 30:
+            signals.append(("Oversold (RSI)", 2))
+            score += 2
+        elif rsi > 70:
+            signals.append(("Overbought (RSI)", -2))
+            score -= 2
+        elif rsi < 45:
+            signals.append(("Bullish RSI", 1))
+            score += 1
+            
+    vol = s.get('volume')
+    avg_vol = s.get('avg_volume')
+    if vol and avg_vol and vol > avg_vol * 1.5:
+        if per_change > 0:
+            signals.append(("Volume Breakout", 1))
+            score += 1
+        else:
+            signals.append(("High Selling Vol", -1))
+            score -= 1
     
     pe = s.get('pe_ratio') or 0
     if 0 < pe < 20:
@@ -218,7 +249,7 @@ def get_recommendation(s):
         signals.append(("Good ROE", 1))
         score += 1
     
-    if score >= 0:
+    if score > 0:
         action = "🟢 BUY"
     elif score < 0:
         action = "🔴 SELL"
@@ -276,15 +307,15 @@ def create_prediction_alerts(df):
         pe = float(row.get('pe_ratio') or 0)
         roe = float(row.get('roe') or 0)
         
-        if current_price > 0 and current_price < 1000:
+        if current_price > 0:
             if "BUY" in rec['action']:
-                target = current_price * 1.2
+                target = current_price * 1.15
                 stop = current_price * 0.95
             elif "SELL" in rec['action']:
-                target = current_price * 0.8
-                stop = current_price * 1.1
+                target = current_price * 0.85
+                stop = current_price * 1.05
             else:
-                target = current_price * 1.1
+                target = current_price * 1.05
                 stop = current_price * 0.97
         else:
             target = 0
@@ -317,7 +348,7 @@ def create_prediction_alerts(df):
     if not bearish.empty:
         msg += f"Bearish\n"
         msg += f"-----------\n\n"
-        for _, s in bearish.head(20).iterrows():
+        for _, s in bearish.head(10).iterrows():
             price = float(s.get('current_price', 0) or 0)
             pct = float(s.get('per_change', 0) or 0)
             target = float(s.get('target', 0) or 0)
@@ -355,7 +386,7 @@ def create_prediction_alerts(df):
     if not bullish.empty:
         msg += f"\nBullish\n"
         msg += f"-----------\n\n"
-        for _, s in bullish.head(20).iterrows():
+        for _, s in bullish.head(10).iterrows():
             price = float(s.get('current_price', 0) or 0)
             pct = float(s.get('per_change', 0) or 0)
             target = float(s.get('target', 0) or 0)
@@ -435,9 +466,62 @@ def create_market_news(df):
     
     return msg
 
+def apply_custom_style():
+    st.markdown("""
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        
+        .stApp {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #f8fafc;
+            font-family: 'Inter', sans-serif;
+        }
+        
+        div[data-testid="stMetricValue"] {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #38bdf8;
+        }
+        
+        .stButton>button {
+            border-radius: 12px;
+            background: linear-gradient(90deg, #3b82f6 0%, #2563eb 100%);
+            color: white;
+            border: none;
+            padding: 0.5rem 2rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .stButton>button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+        }
+        
+        .stock-card {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border-radius: 16px;
+            padding: 1.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            margin-bottom: 1rem;
+        }
+        
+        .header-title {
+            background: linear-gradient(90deg, #60a5fa 0%, #c084fc 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-size: 3rem;
+            font-weight: 800;
+            margin-bottom: 2rem;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
 def main():
-    st.set_page_config(page_title="ManverInsight", page_icon="📈", layout="wide")
-    st.title("📈 ManverInsight")
+    st.set_page_config(page_title="ManverInsight | Premium Stocks", page_icon="📈", layout="wide")
+    apply_custom_style()
+    st.markdown('<h1 class="header-title">📈 ManverInsight Pro</h1>', unsafe_allow_html=True)
     
     query_params = st.query_params
     is_triggered = query_params.get("trigger", "") == TRIGGER_PARAM
@@ -454,7 +538,7 @@ def main():
                 messages[0] = messages[0] + "\n\n" + market_news
             
             for i, msg in enumerate(messages):
-                st.code(msg[:800], language="markdown")
+                st.code(msg[:4000], language="markdown")
             
             bot_token = str(st.secrets.get("BOT_TOKEN", "")).strip()
             chat_id = str(st.secrets.get("CHAT_ID", "")).strip()
@@ -464,7 +548,7 @@ def main():
             sent = 0
             failed = 0
             
-            if len(bot_token) > 30 and chat_id.isdigit():
+            if len(bot_token) > 30 and (chat_id.isdigit() or (chat_id.startswith('-') and chat_id[1:].isdigit())):
                 for msg in messages:
                     result = send_telegram_msg(msg, debug=True)
                     if result.get("success"):
@@ -530,6 +614,16 @@ def main():
             pred_display = pred_bearish[['symbol', 'current_price', 'per_change']].copy()
             pred_display['change_pct'] = pred_display['per_change'].apply(lambda x: f"{x:+.2f}%")
             st.dataframe(pred_display[['symbol', 'current_price', 'change_pct']], hide_index=True)
+            
+        st.subheader("🏢 Sector Performance")
+        if not df.empty:
+            sector_perf = df.groupby('sector')['per_change'].mean().sort_values(ascending=False).reset_index()
+            sector_perf['Performance'] = sector_perf['per_change'].apply(lambda x: f"{x:+.2f}%")
+            st.dataframe(sector_perf[['sector', 'Performance']], use_container_width=True, hide_index=True)
+
+        st.subheader("🌡️ Market Sentiment")
+        bull_pct = len(pred_bullish) / len(pred_df) * 100 if not pred_df.empty else 0
+        st.progress(bull_pct / 100, text=f"Bullish Sentiment: {bull_pct:.1f}%")
     
     with tab2:
         col1, col2 = st.columns([2, 1])
@@ -586,7 +680,8 @@ def main():
                             'eps': info.get('trailingEps'),
                             'beta': info.get('beta'),
                             'sector': info.get('sector'),
-                            'industry': info.get('industry')
+                            'industry': info.get('industry'),
+                            'history': hist
                         }
                         selected_stock = custom_symbol
                 except Exception as e:
@@ -606,11 +701,35 @@ def main():
             rec = get_recommendation(s)
             
             if "BUY" in rec['action']:
-                st.success(f"🟢 {rec['action']} - Predicted UP")
+                st.success(f"🟢 {rec['action']} - Strong Momentum")
             elif "SELL" in rec['action']:
-                st.error(f"🔴 {rec['action']} - Predicted DOWN")
+                st.error(f"🔴 {rec['action']} - Weak Trend")
             else:
-                st.warning(f"⚪ HOLD")
+                st.warning(f"⚪ HOLD - Consolidation")
+            
+            # Interactive Chart
+            if 'history' in s:
+                chart_df = s['history']
+            else:
+                ticker = yf.Ticker(f"{s['symbol']}.NS")
+                chart_df = ticker.history(period="6mo")
+                
+            fig = make_subplots(rows=2, cols=1, shared_xaxes=True, 
+                               vertical_spacing=0.03, subplot_titles=(f'{s["symbol"]} Price', 'Volume'), 
+                               row_width=[0.2, 0.7])
+
+            fig.add_trace(go.Candlestick(x=chart_df.index,
+                            open=chart_df['Open'],
+                            high=chart_df['High'],
+                            low=chart_df['Low'],
+                            close=chart_df['Close'], name='Price'), row=1, col=1)
+
+            fig.add_trace(go.Bar(x=chart_df.index, y=chart_df['Volume'], name='Volume', marker_color='rgba(100, 149, 237, 0.6)'), row=2, col=1)
+
+            fig.update_layout(template="plotly_dark", height=500, showlegend=False, 
+                            xaxis_rangeslider_visible=False,
+                            margin=dict(l=20, r=20, t=40, b=20))
+            st.plotly_chart(fig, use_container_width=True)
             
             p_tab, f_tab, a_tab = st.tabs(["⚡ Performance", "💼 Fundamentals", "🏢 About"])
             

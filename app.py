@@ -21,7 +21,7 @@ NIFTY50_TICKERS = [
     "TATASTEEL.NS", "TECHM.NS", "TITAN.NS", "ULTRACEMCO.NS", "WIPRO.NS"
 ]
 
-@st.cache_data(ttl=1800) # Increased to 30 mins to avoid Rate Limits
+@st.cache_data(ttl=1800)
 def get_snapshot():
     """Fetches Nifty 50 once and caches for 30 minutes."""
     try:
@@ -48,42 +48,36 @@ def apply_ui():
     """, unsafe_allow_html=True)
 
 def main():
-    st.set_page_config(page_title="Manver Insights", width='wide' if hasattr(st, 'set_page_config') else None)
+    # FIXED: Layout instead of width
+    st.set_page_config(page_title="Manver Insights", layout="wide")
     apply_ui()
     st.markdown('<h1 class="h-title">Manver Insights</h1>', unsafe_allow_html=True)
 
-    # Use session state to cache search results locally to avoid re-fetching on UI clicks
     if 'last_search' not in st.session_state: st.session_state.last_search = ""
     if 'search_data' not in st.session_state: st.session_state.search_data = None
 
     q = st.text_input("🔍 Global Predictive Search", placeholder="e.g. TCS, ZOMATO, AAPL").upper().strip()
     
-    # Only fetch if new search or state empty
     if q and q != st.session_state.last_search:
         st.session_state.search_data = None
         st.session_state.last_search = q
         
         found = False
-        # Limit attempts to reduce request count
-        attempts = [f"{q}.NS", q] # Try NSE then verbatim
-        
+        attempts = [f"{q}.NS", q]
         for tsym in attempts:
-            with st.spinner(f"AI Fetching {tsym}..."):
-                try:
-                    df = yf.download(tsym, period="1y", progress=False)
-                    if not df.empty and len(df) > 1:
-                        st.session_state.search_data = {'df': df, 'ticker': tsym}
-                        found = True
-                        break
-                except Exception as e:
-                    if "Rate limited" in str(e):
-                        st.error("⚠️ Yahoo Finance is rate limiting requests. Please wait a few minutes.")
-                        break
-                    continue
-        if not found and not "Rate limited" in str(st.session_state.get('error', '')):
-            st.warning(f"No results for {q}. Try adding exchange suffix (e.g. {q}.NS)")
+            try:
+                df = yf.download(tsym, period="1y", progress=False)
+                if not df.empty and len(df) > 1:
+                    st.session_state.search_data = {'df': df, 'ticker': tsym}
+                    found = True
+                    break
+            except Exception as e:
+                if "Rate limited" in str(e):
+                    st.error("⚠️ Yahoo Finance Rate Limit. Wait 2 mins.")
+                    break
+                continue
+        if not found: st.warning(f"No results for {q}.")
 
-    # Display cached search results
     if st.session_state.search_data:
         sd = st.session_state.search_data
         df = sd['df']
@@ -91,7 +85,6 @@ def main():
         pp = float(df['Close'].iloc[-2])
         chg = ((p-pp)/pp)*100
         
-        # Prediction Score Logic
         rsi = 50
         if len(df) > 15:
             delta = df['Close'].diff()
@@ -108,23 +101,21 @@ def main():
             <h2>₹{p:,.2f} <span style="color:{'#4ade80' if chg > 0 else '#f87171'};">{chg:+.2f}%</span></h2>
             <div style="margin-top:10px;">
                 <span style="background:rgba(255,255,255,0.1); padding:5px 10px; border-radius:10px;">RSI: {rsi:.1f}</span>
-                <span style="background:rgba(255,255,255,0.1); padding:5px 10px; border-radius:10px; margin-left:10px;">Decision: {pred}</span>
             </div>
         </div>
         """, unsafe_allow_html=True)
         
         fig = go.Figure(go.Candlestick(x=df.index[-120:], open=df['Open'][-120:], high=df['High'][-120:], low=df['Low'][-120:], close=df['Close'][-120:]))
         fig.update_layout(template="plotly_dark", height=450, xaxis_rangeslider_visible=False, margin=dict(l=0,r=0,t=0,b=0))
-        st.plotly_chart(fig, width='stretch')
+        # FIXED: Correct width parameter for plotly_chart
+        st.plotly_chart(fig, use_container_width=True)
 
-    # Snapshot Dashboard
     st.divider()
-    st.subheader("🌐 Indian Market Snapshot")
+    st.subheader("📊 Market Snapshot")
     snap = get_snapshot()
     if not snap.empty:
-        st.dataframe(snap.sort_values('Change', ascending=False).head(10), hide_index=True, width='stretch')
-    else:
-        st.info("Market Snapshot is cooling down to avoid rate limits. Use search for real-time data.")
+        # FIXED: Correct width parameter for dataframe
+        st.dataframe(snap.sort_values('Change', ascending=False).head(10), hide_index=True, use_container_width=True)
 
 if __name__ == "__main__":
     main()
